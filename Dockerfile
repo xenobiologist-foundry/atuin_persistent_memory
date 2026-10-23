@@ -14,6 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm /tmp/atuin-source.tar.gz
 WORKDIR /opt/atuin
 
+# Optional compatibility fixture only; never copied into the production hub.
+FROM native-source AS bash44-build
+RUN apt-get update && apt-get install -y --no-install-recommends patch libncurses-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker/bash44-sources.sha256 /tmp/bash44-sources.sha256
+COPY docker/build-bash44.sh /usr/local/sbin/build-bash44
+RUN /bin/bash /usr/local/sbin/build-bash44
+
 FROM native-source AS native-build
 ENV RUSTUP_TOOLCHAIN=1.95.0
 COPY native-helper/Cargo.toml native-helper/build.rs /opt/atuin/crates/atuin-ssh-native/
@@ -125,6 +133,13 @@ EXPOSE 22
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/sbin/destination-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
 
+# An old-Bash fixture whose account keeps /bin/sh as its configured shell.
+FROM destination AS destination-bash44
+COPY --from=bash44-build /out/bash44 /bin/bash
+RUN usermod --shell /bin/sh remote \
+    && /bin/bash --version \
+    && ! command -v python && ! command -v python3 && ! command -v atuin
+
 FROM runtime AS test
 COPY --from=benchmark-build /out/atuin-ssh-bench-seed /usr/local/bin/atuin-ssh-bench-seed
 RUN apt-get update && apt-get install -y --no-install-recommends strace \
@@ -136,6 +151,10 @@ RUN chmod 0755 /usr/local/sbin/test-keys
 WORKDIR /opt/atuin-ssh
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+
+FROM test AS legacy-test
+COPY --from=bash44-build /out/bash44 /usr/local/bin/bash44
+ENV ATUIN_SSH_TEST_BASH44=/usr/local/bin/bash44
 
 FROM runtime AS dev
 ENV PYTHONPATH=/workspace/src

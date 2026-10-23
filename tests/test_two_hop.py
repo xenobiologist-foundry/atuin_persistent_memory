@@ -89,9 +89,16 @@ class TwoHopNativeWidget(unittest.TestCase):
     def enter_destination(self, options: list[str] | None = None):
         destination = os.environ.get("ATUIN_SSH_TEST_DEST", "destination")
         user = os.environ.get("ATUIN_SSH_TEST_DEST_USER", "remote")
-        args = ["ssh", *(options or []), user+'@'+destination]
+        prefix = (["atuin-ssh", "connect", "--bash", "--"]
+                  if os.environ.get("ATUIN_SSH_TEST_FORCE_BASH") == "1" else ["ssh"])
+        args = [*prefix, *(options or []), user+'@'+destination]
         self.client.send(shlex.join(args)+"\n")
         self.client.drain(.5)
+        self.client.send("printf '\\n__E2E_DEST_ORIGIN__%s:%s__\\n' \"$(hostname)\" \"$(id -un)\"\n")
+        origin = self.client.expect(re.compile(rb"\r\n__E2E_DEST_ORIGIN__([^:\r]+):([^\r]+)__\r\n"), timeout=30)
+        self.assertEqual((origin[1].decode(), origin[2].decode()),
+                         (os.environ.get("ATUIN_SSH_TEST_DEST_HOSTNAME", "destination"), user),
+                         "onward SSH did not reach the fixture; refusing to run destination setup on the hub")
         self.client.send(SNAPSHOT_SETUP + "; printf '\\n__E2E_SETUP_DONE__\\n'\n")
         self.client.expect(b"\r\n__E2E_SETUP_DONE__\r\n", timeout=30)
         prompt = self.client.expect(GEN_PROMPT, timeout=30)
@@ -183,11 +190,31 @@ class TwoHopNativeWidget(unittest.TestCase):
         self.client.drain(.15)
         self.assertEqual(self.snapshot(), original)
 
+    def test_native_cancel_preserves_internal_readline_mark(self):
+        # Bash 4.4 does not expose READLINE_MARK. Test the editor's real mark
+        # through its native exchange-point-and-mark action instead of treating
+        # an absent shell variable as a zero-valued mark.
+        self.client.send(b"abcdef\x01\x06\x06\x00\x06\x06")
+        self.assertEqual(self.snapshot()[:2], ("abcdef", 4))
+        self.client.send(b"\x18\x18")
+        self.assertEqual(self.snapshot()[:2], ("abcdef", 2))
+        self.client.send(b"\x18\x18")
+        self.assertEqual(self.snapshot()[:2], ("abcdef", 4))
+        self.widget()
+        self.client.send(b"\x1b")
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[:2], ("abcdef", 4))
+        self.client.send(b"\x18\x18")
+        self.assertEqual(self.snapshot()[:2], ("abcdef", 2))
+
     def test_up_invokes_native_widget(self):
         self.widget(key=b"\x1b[A")
         self.client.expect(b"SESSION")
         self.client.send(b"\x1b")
-        self.client.expect(PROMPT)
+        # An unfiltered result may display SNAPSHOT_SETUP itself, including
+        # the literal PROMPT text. Require the expanded numeric generation so
+        # the snapshot keys cannot be sent while that native result is shown.
+        self.client.expect(GEN_PROMPT)
         self.assertEqual(self.snapshot()[0], "")
 
     def test_immediate_typeahead_owned_by_widget(self):
@@ -402,7 +429,10 @@ class TwoHopNativeWidget(unittest.TestCase):
     def test_native_hub_disabled_bindings_are_preserved_on_destination(self):
         self.client.send("exit\n")
         self.client.expect(HUB_PROMPT)
-        self.client.send("__atuin_bind_ctrl_r=false; __atuin_bind_up_arrow=false; printf '\\n__DISABLED_SET__\\n'\n")
+        explicit_environment = ("export ATUIN_SSH_DISABLE_CTRL_R=1 ATUIN_SSH_DISABLE_UP=1; "
+                                if os.environ.get("ATUIN_SSH_TEST_FORCE_BASH") == "1" else "")
+        self.client.send("__atuin_bind_ctrl_r=false; __atuin_bind_up_arrow=false; " + explicit_environment
+                         + "printf '\\n__DISABLED_SET__\\n'\n")
         self.client.expect(b"\r\n__DISABLED_SET__\r\n")
         self.client.expect(HUB_PROMPT)
         self.enter_destination()

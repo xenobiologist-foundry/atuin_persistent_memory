@@ -8,6 +8,13 @@ The workstation is a terminal/OpenSSH client. The hub owns the installed native
 Atuin and its local persistent state. The destination owns Bash's authoritative
 Readline buffer; its integration consists of session-only Bash functions.
 
+Automatic enhancement requires a Bash login shell and Bash major version 5 or
+later. A non-Bash account shell is preserved. Explicit
+`atuin-ssh connect --bash -- target` selects the destination's existing Bash
+4.4 or newer for this session; 4.4 additionally requires `date '+%s %N'` with a
+numeric nanosecond component. A subsequently opened nested Bash does not by
+itself activate the bridge. No project installation on the destination is used.
+
 ## Reproduce the probes
 
 All Python and Bash execution belongs in Linux containers. From native Windows
@@ -100,7 +107,7 @@ and execution. The bridge must never `eval` a returned command.
 | Exact account/directory/workspace scopes | Cross-account results and global switching | Distinct pinned native extension tested against account/host/global/directory/workspace data; no schema changes |
 | Native records/privacy/replay | Record-store checks and crash-window faults | Pinned native helper uses upstream APIs with compatibility checks/stable IDs; strict failed-command privacy, replay and native record cases pass the recorded aggregate |
 | Historical import | Timestamp/multiline/occurrence/collision fixtures | Native/ledger probes passed; unknown fields stay explicit; broader ambiguity/rotation/time-bound parity remains incomplete |
-| Startup/hook composition | Plain-vs-enhanced differential sessions | Five real isolated login PTY probes pass; existing DEBUG preserved with enhancement and capture disabled; replaced PROMPT_COMMAND falls back plain; EXIT/preexec/existing-Atuin combinations need broader coverage |
+| Startup/hook composition | Plain-vs-enhanced differential sessions | Descriptor startup composes final scalar/array PROMPT_COMMAND after profiles; existing DEBUG/functrace remains intact with enhancement and capture disabled; first-prompt, history defaults and foreground read-e checks are part of the updated suite; EXIT/preexec/existing-Atuin combinations need broader coverage |
 | Experimental pty-proxy | Generated integration + coexistence session | Never enable output retention or recursive proxying; active proxy must bypass safely |
 | OpenSSH invocation modes | Native `ssh -G` plus passthrough tests | Explicit commands, queries, subsystems, non-TTY, background and forwarding-only bypass; six real SSH cases pass aliases, RemoteCommand, command/status, TCP forwarding, ProxyJump and shared ControlMaster ownership |
 | Terminal transport | Arbitrary bytes, frames, output flood, resize, jobs | Every byte value/unrelated OSC/DCS match plain SSH; >3 MiB ordered background output survives buffering; active-UI resize, jobs/external editor, less/nano/top and password/confirmation input pass |
@@ -110,6 +117,65 @@ instrumentation scopes. They must remain usable as foreground programs. Their
 inner commands/context are not captured by observing their visible prompt.
 
 ## Platform evidence and failures
+
+On 2026-10-24, a real destination running Bash 5.2.21 had its bridge handshake
+and native command commits verified; the user confirmed Ctrl-R opened the hub
+history interface. A separate actual destination reported `SHELL=/bin/sh` and
+Bash 4.4.23, with no bridge prompt hook, widget function or DEBUG trap. That
+session took the current unsupported-shell/version plain fallback. These
+observations contain no destination addresses, account names or history bodies.
+They establish those particular compatibility outcomes, not a complete physical
+platform/keymap acceptance run. Check `command -v bash` and `bash --version` for
+the installed Bash before choosing a supported session approach. The explicit
+4.4 compatibility path was implemented after these real-user observations; the
+original physical destination has not yet been retested with the updated image.
+
+The optional legacy fixture builds unmodified GNU Bash 4.4.18 plus official
+patches 019–023 into Bash 4.4.23, with SHA256 pins in
+`docker/bash44-sources.sha256`. It links the installed terminfo library; an
+earlier fixture without ncurses development headers could not resolve the
+terminal's capabilities and produced misleading display failures. The
+destination account remains configured with `/bin/sh`, with no Python or Atuin.
+The test client selects its existing Bash using `connect --bash`.
+
+```text
+docker compose -f compose.test.yaml -f compose.legacy-test.yaml build
+docker compose -f compose.test.yaml -f compose.legacy-test.yaml up -d --wait hub destination
+docker compose -f compose.test.yaml -f compose.legacy-test.yaml run --rm client
+docker compose -f compose.test.yaml -f compose.legacy-test.yaml down
+```
+
+The descriptor bootstrap restores normal Bash history defaults before profiles;
+temporary POSIX initialization must not leave `HISTFILE=~/.sh_history`. Focused
+plain/enhanced comparisons cover default, exported custom and exported empty
+HISTFILE, shell modes, Readline variables, exported ENV and inherited
+inherit_errexit. Existing POSIX startup and unavailable descriptor/readonly ENV
+cases use a fixed diagnostic and ordinary Bash. The first primary prompt and a
+profile's foreground `read -e` have separate ownership tests. Scalar prompt hooks
+are used through Bash 5.0; native array execution begins in 5.1. Private callback
+sequences are distinct per keymap because old Bash shares their callback lookup.
+
+## Import progress and interruption
+
+Imports report count-only progress on stderr and their final JSON report on
+stdout. The SSH reader allocates a PTY for interactive login Bash, then resets
+raw mode after profiles so newline translation cannot alter history bytes. Its
+tests cover custom HISTFILE, exact bytes, unchanged source and interruption.
+
+The native helper shares setup and connection pools in bounded batches while
+retaining compatibility, privacy, uniqueness and native-record checks. The
+metadata-only [benchmark](../artifacts/import-performance.json) measured 200
+synthetic entries at 7.9936 seconds with individual helpers and 0.4599 seconds
+with batches on this host; SSH transfer and ledger alignment are excluded.
+Uncertain writes retain individual native-record reconciliation deadlines.
+
+A public-CLI fault test commits three native records, interrupts before the
+batch reply, and explicitly resumes 64 uncertain plus six pending entries into
+exactly the original 70 IDs and 70 encrypted records, with native verification.
+No canceled production import is automatically restarted. Reimport matching
+currently depends on the literal SSH target, host/account/HISTFILE and aligned
+accepted snapshot; alias changes, changed filters/time bounds and ambiguous
+untimestamped rotations remain limitations rather than an exactly-once promise.
 
 The first foundation image used Python 3.14.2 on Debian 12, Bash 5.2.15,
 OpenSSH 9.2p1 Debian-2+deb12u10 and OpenSSL 3.0.22. Its GNU Atuin binary refused to

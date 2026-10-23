@@ -1,0 +1,38 @@
+{
+  "recorded_local_date": "2026-10-24",
+  "platform": "linux/amd64 Docker Desktop from native PowerShell",
+  "python": "3.14.2",
+  "atuin": "18.24.1",
+  "entries_per_run": 200,
+  "network_namespace": "none",
+  "fixture": "new isolated temporary native profile per run; synthetic commands; state removed",
+  "baseline": {
+    "image_id": "sha256:55d6ebd29244accb675611d3ea26aea09d3596f8971236298b4a9cde05f305a8",
+    "mode": "individual helper operation for each filter, probe and import",
+    "helper_calls": 600,
+    "filter_seconds": 2.4524,
+    "probe_seconds": 2.0242,
+    "import_seconds": 3.5169,
+    "total_seconds": 7.9936,
+    "native_history_rows": 200,
+    "native_store_verify": true
+  },
+  "candidate": {
+    "mode": "bounded batches with shared native pools and current-thread Tokio runtime",
+    "helper_calls": 12,
+    "maximum_events_per_batch": 64,
+    "filter_seconds": 0.0740,
+    "probe_seconds": 0.0528,
+    "import_seconds": 0.3330,
+    "total_seconds": 0.4599,
+    "native_history_rows": 200,
+    "native_store_verify": true
+  },
+  "reproduce_script": "tests/benchmark_import_native.py",
+  "reproduce_candidate": "docker run --rm --network none --entrypoint python atuin-ssh:import-check-test /opt/atuin-ssh/tests/benchmark_import_native.py --batch",
+  "limits": [
+    "One local sample per variant; a concurrent Docker image build can affect timings.",
+    "Measures synthetic native filter/probe/import, excluding SSH transfer, occurrence alignment and ledger transactions.",
+    "Uncertain stable-ID recovery intentionally retains per-entry native record scans and its separate 120-second deadline."
+  ]
+}

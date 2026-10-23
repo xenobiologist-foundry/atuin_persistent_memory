@@ -8,11 +8,15 @@ the native Atuin binary. Python never parses or executes destination commands.
 Destination Bash owns Readline, completion, accepted command representation,
 execution and lifecycle callbacks.
 
-The destination receives Bash functions, variables, hooks and bindings via an
-SSH command containing an exported first-prompt function and `exec bash --login
--i`. Profiles execute in the real login Bash; no rcfiles or other destination
-files are created. A profile that replaces inherited `PROMPT_COMMAND` can
-disable installation. Also, sshd's command-launching Bash can run `.bashrc`
+The destination receives Bash functions, variables, hooks and bindings through
+an SSH command and an initialization file descriptor. A real login Bash uses
+POSIX ENV startup to read that descriptor, restores ordinary Bash modes and the
+original exported ENV, closes the private descriptor, then reads `/etc/profile`
+and the first readable user login profile. The payload composes the profiles'
+final PROMPT_COMMAND before its first execution, so the first primary Readline
+prompt is eligible without a warm-up command. No destination file is created.
+Existing POSIX startup or a readonly ENV falls back to ordinary Bash. Also,
+sshd's command-launching Bash can run `.bashrc`
 noninteractively before the login shell. A profile with noninteractive side
 effects therefore needs differential startup verification. Full startup
 equivalence for every custom profile is not established. Existing incompatible
@@ -88,12 +92,26 @@ authoritative accepted buffer without changing HISTCONTROL. Complex escaped,
 bracket or extended HISTIGNORE patterns conservatively disable this duplicate
 fallback and report degradation; basic globs and exact `&` are supported.
 
-Destination `EPOCHREALTIME` supplies microsecond wall timestamps. Duration uses
-the observed remote completion minus start, including command execution and
+Bash 5 supplies microsecond wall timestamps through `EPOCHREALTIME`. Explicit
+Bash 4.4 sessions use the existing `date '+%s %N'` utility and normalize its
+integer nanosecond component. Duration uses remote completion minus start,
+including command execution and
 shell instrumentation costs; it is not a monotonic clock. Clock reversal yields
 native unknown duration (-1). Background status is launch status. `exit`,
 `exec` and disconnect can leave unknown completion; no success is invented.
 Historical import retains known timestamps and marks unknown/synthetic fields.
+
+Explicit import reads the configured HISTFILE through a separate OpenSSH PTY.
+Interactive Bash gets a controlling terminal; raw mode is applied again after
+profiles so terminal newline conversion cannot alter file bytes. The reader
+bounds startup output and history bytes and never executes file contents.
+Native privacy, uniqueness probes and writes share setup in bounded batches
+(64 entries and at most 1 MiB of JSON per batch). Privacy still precedes durable
+ledger payloads. Oversized JSON for an otherwise valid command uses the existing
+single-event wire limit. A coordinator lock prevents concurrent resume processes
+from overwriting confirmed results with stale attempt states. Attempts are durable
+before native submission; uncertain writes recover individually by stable ID,
+including tombstones, before any replay. Progress uses counts, never command text.
 
 One central LAN hub has one native local SQLite installation and writer state.
 Concurrent workstation shells share that installation, with no Atuin account.

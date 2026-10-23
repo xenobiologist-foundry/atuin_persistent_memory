@@ -100,8 +100,10 @@ passed evidence, known failures, conservative fallback and manual gates.
   historical unregistered sessions are outside this endpoint-conflict detector.
   Full import/search identity isolation needs a native-compatible design.
 - The real login child preserves profiles, but sshd's command-launching Bash
-  can run noninteractive .bashrc first. Replacing PROMPT_COMMAND suppresses
-  bootstrap and falls back plain. Incompatible DEBUG/functrace are preserved;
+  can run noninteractive .bashrc first. Descriptor initialization loads login
+  profiles before composing their final PROMPT_COMMAND, including replacements.
+  Original POSIX startup or unsupported descriptor/ENV cases stay plain.
+  Incompatible DEBUG/functrace are preserved;
   enhanced keys/capture degrade because foreground eligibility is unproven.
   Complete preexec/EXIT/existing-Atuin startup parity remains work.
 - Basic HISTIGNORE globs and exact & are supported without policy changes.

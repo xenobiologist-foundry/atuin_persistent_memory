@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -106,7 +107,9 @@ class CommandLifecycle(unittest.TestCase):
     def test_foreground_bash_read_e_owns_readline_and_its_input_is_not_history(self):
         typed = "FOREGROUND_INPUT_"+uuid.uuid4().hex
         self.shell.client.send("IFS= read -e -r -p '__READ_E__> ' v; printf '\\n__READ_E_VALUE__%s__\\n' \"$v\"\n")
-        self.shell.client.expect(b"\x1b[?2004h__READ_E__> ")
+        # Readline 7 does not enable bracketed paste by default. Require the
+        # actual foreground prompt, not the same text in the echoed command.
+        self.shell.client.expect(re.compile(rb"(?:\r\n|\x1b\[\?2004h)__READ_E__> "))
         self.shell.client.send(typed)
         self.shell.client.send(b"\x12")
         self.shell.client.expect(b"reverse-i-search")

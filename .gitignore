@@ -7,6 +7,7 @@ artifacts/*
 !artifacts/persistence-report.json
 !artifacts/native-tui-scaling.json
 !artifacts/relay-differential.json
+!artifacts/import-performance.json
 __pycache__/
 *.py[cod]
 *.egg-info/

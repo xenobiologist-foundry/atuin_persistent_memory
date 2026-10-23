@@ -1,6 +1,6 @@
 //! Minimal version-pinned adapter. All native writes use upstream public APIs.
 //! JSON stdin is bounded; stdout contains status/IDs only, never command bodies.
-use std::{io::{self, Read}, path::Path, process::Command, fs::{self, OpenOptions}, os::unix::fs::{OpenOptionsExt, PermissionsExt}};
+use std::{io::{self, Read}, path::Path, process::Command, fs::{self, OpenOptions}, os::unix::fs::{OpenOptionsExt, PermissionsExt}, sync::Arc};
 use atuin_client::{database::Sqlite, history::{History, HistoryId, store::{HistoryStore, HistoryRecord}}, record::sqlite_store::SqliteStore, settings::Settings};
 use atuin_common::encryption::paseto_v4;
 use atuin_domain::record::{CmdHost, CmdUser, CmdOrigin, RecordTag};
@@ -82,20 +82,65 @@ async fn existing_record(store: &HistoryStore, id: HistoryId) -> Result<(Option<
     Ok((created, deleted))
 }
 
-async fn run(operation: &str, event: Event) -> Result<Value> {
-    let output = Command::new("atuin").arg("--version").output()?;
-    let version = String::from_utf8(output.stdout)?;
-    if !output.status.success() || !["atuin 18.24.1", "atuin 18.24.1 (c58d2e993d05be423315f6ae3739e9ab3e45eea5)"].contains(&version.trim()) { bail!("native executable version mismatch"); }
-    let settings = Settings::new()?;
-    if settings.auto_sync || settings.update_check { bail!("local-only native settings required"); }
-    let _writer_lock = if ["start", "write", "import", "discard"].contains(&operation) {
-        let root = std::env::var("ATUIN_SSH_STATE_DIR").unwrap_or_else(|_| "/state/bridge".into());
-        fs::create_dir_all(&root)?;
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
-        let file = OpenOptions::new().create(true).read(true).write(true).mode(0o600).open(Path::new(&root).join("native-writer.lock"))?;
-        file.lock()?;
-        Some(file)
-    } else { None };
+/// One bounded invocation owns one settings snapshot, writer lock and native
+/// connection pools. Per-entry privacy/identity/reconciliation still runs.
+struct NativeState {
+    settings: Arc<Settings>,
+    checked: bool,
+    database: Option<Sqlite>,
+    store: Option<HistoryStore>,
+    _writer_lock: Option<fs::File>,
+}
+
+impl NativeState {
+    fn new(operation: &str) -> Result<Self> {
+        let output = Command::new("atuin").arg("--version").output()?;
+        let version = String::from_utf8(output.stdout)?;
+        if !output.status.success() || !["atuin 18.24.1", "atuin 18.24.1 (c58d2e993d05be423315f6ae3739e9ab3e45eea5)"].contains(&version.trim()) { bail!("native executable version mismatch"); }
+        let settings = Settings::new()?;
+        if settings.auto_sync || settings.update_check { bail!("local-only native settings required"); }
+        let writer_lock = if ["start", "write", "import", "discard"].contains(&operation) {
+            let root = std::env::var("ATUIN_SSH_STATE_DIR").unwrap_or_else(|_| "/state/bridge".into());
+            fs::create_dir_all(&root)?;
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
+            let file = OpenOptions::new().create(true).read(true).write(true).mode(0o600).open(Path::new(&root).join("native-writer.lock"))?;
+            file.lock()?;
+            Some(file)
+        } else { None };
+        Ok(Self { settings: Arc::new(settings), checked: false, database: None, store: None, _writer_lock: writer_lock })
+    }
+
+    fn check_databases(&mut self) -> Result<()> {
+        if !self.checked {
+            check_database(Path::new(&self.settings.db_path), HISTORY)?;
+            check_database(Path::new(&self.settings.record_store_path), RECORD)?;
+            check_database(Path::new(&self.settings.meta.db_path), META)?;
+            self.checked = true;
+        }
+        Ok(())
+    }
+
+    async fn database(&mut self) -> Result<Sqlite> {
+        self.check_databases()?;
+        if self.database.is_none() {
+            self.database = Some(Sqlite::new(&self.settings.db_path, self.settings.local_timeout).await?);
+        }
+        Ok(self.database.as_ref().unwrap().clone())
+    }
+
+    async fn store(&mut self) -> Result<HistoryStore> {
+        self.check_databases()?;
+        if self.store.is_none() {
+            let store = SqliteStore::new(&self.settings.record_store_path, self.settings.local_timeout).await?;
+            let key = paseto_v4::Key::try_load_or_generate(&self.settings.key_path)?;
+            self.store = Some(HistoryStore::new(store, self.settings.host_id().await?, key));
+        }
+        Ok(self.store.as_ref().unwrap().clone())
+    }
+}
+
+async fn run(operation: &str, event: Event, native: &mut NativeState) -> Result<Value> {
+    let settings = native.settings.clone();
     if operation == "check" {
         check_database(Path::new(&settings.db_path), HISTORY)?;
         check_database(Path::new(&settings.record_store_path), RECORD)?;
@@ -129,11 +174,9 @@ async fn run(operation: &str, event: Event) -> Result<Value> {
     if !["start", "write", "import", "probe"].contains(&operation) { bail!("unsupported operation"); }
     if event.id.is_empty() { bail!("stable native identity required"); }
     if settings.daemon.enabled { bail!("native adapter daemon mode not yet verified"); }
-    check_database(Path::new(&settings.db_path), HISTORY)?;
-    check_database(Path::new(&settings.record_store_path), RECORD)?;
-    check_database(Path::new(&settings.meta.db_path), META)?;
+    native.check_databases()?;
     if operation == "probe" && !Path::new(&settings.db_path).exists() { return Ok(json!({"collision": false})); }
-    let db = Sqlite::new(&settings.db_path, settings.local_timeout).await?;
+    let db = native.database().await?;
     if operation == "probe" {
         let collision = db.range(h.timestamp, h.timestamp).await?.iter().any(|p| p.id != h.id && p.cwd == h.cwd && p.command == h.command);
         return Ok(json!({"collision": collision}));
@@ -146,9 +189,7 @@ async fn run(operation: &str, event: Event) -> Result<Value> {
     let reconcile = event.reconcile || (operation == "import" && prior.is_some()) || prior.as_ref().is_some_and(|p| p.exit != -1 || p.duration != -1);
     let mut native_store = None;
     if operation != "start" || reconcile {
-        let store = SqliteStore::new(&settings.record_store_path, settings.local_timeout).await?;
-        let key = paseto_v4::Key::try_load_or_generate(&settings.key_path)?;
-        native_store = Some(HistoryStore::new(store, settings.host_id().await?, key));
+        native_store = Some(native.store().await?);
     }
     if reconcile {
         let store = native_store.as_ref().ok_or_else(|| eyre!("native record store unavailable"))?;
@@ -180,18 +221,34 @@ async fn run(operation: &str, event: Event) -> Result<Value> {
     Ok(json!({"state": "committed", "id": h.id.to_string(), "record_id": record.to_string()}))
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let result = async {
-        let operation = std::env::args().nth(1).ok_or_else(|| eyre!("operation required"))?;
+        let requested = std::env::args().nth(1).ok_or_else(|| eyre!("operation required"))?;
+        let operation = requested.strip_suffix("_batch").unwrap_or(&requested);
+        let batch = operation != requested;
+        if batch && !["filter", "probe", "import"].contains(&operation) { bail!("unsupported batch operation"); }
         let mut raw = Vec::new();
         io::stdin().take(2_097_153).read_to_end(&mut raw)?;
         if raw.len() > 2_097_152 { bail!("event too large"); }
+        if batch {
+            #[derive(Deserialize)]
+            struct Batch { events: Vec<Event> }
+            let events: Batch = serde_json::from_slice(&raw)?;
+            if events.events.len() > 64 { bail!("batch exceeds supported bound"); }
+            let mut native = NativeState::new(operation)?;
+            let mut results = Vec::with_capacity(events.events.len());
+            for event in events.events {
+                results.push(run(operation, event, &mut native).await?);
+            }
+            return Ok(json!({"results": results}));
+        }
         let event: Event = if operation == "check" { Event::default() } else if operation == "discard" {
             let value: Value = serde_json::from_slice(&raw)?;
             Event { id: value.get("id").and_then(Value::as_str).ok_or_else(|| eyre!("identity required"))?.into(), ..Event::default() }
         } else { serde_json::from_slice(&raw)? };
-        run(&operation, event).await
+        let mut native = NativeState::new(operation)?;
+        run(operation, event, &mut native).await
     }.await;
     match result {
         Ok(reply) => println!("{}", reply),

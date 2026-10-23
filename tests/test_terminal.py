@@ -66,7 +66,7 @@ class TerminalContracts(unittest.TestCase):
         # Start producing only AFTER actual native UI activation. A timed sleep
         # races a legitimately delayed prompt visibility barrier.
         subprocess.run(["/usr/bin/ssh", "-F", str(self.case.config), user+"@"+destination,
-                        f"kill -USR1 -- {pid}"], check=True, timeout=10, capture_output=True)
+                        f"/bin/kill -USR1 -- {pid}"], check=True, timeout=10, capture_output=True)
         self.case.client.drain(1)
         # Backpressure must protect the native display, while the producing
         # process may block. No output is allowed to disappear on restoration.

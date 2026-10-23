@@ -166,10 +166,10 @@ class NativeAtuin:
             # Recovery runs in background workers, never on the relay byte path.
             timeout = 120 if event.get("reconcile") else 10
         try:
-            reply = subprocess.run([self.helper, operation], input=json.dumps(event),
+            reply = subprocess.run([self.helper, operation], input=json.dumps(event, ensure_ascii=False),
                                    text=True, encoding="utf-8", capture_output=True,
                                    timeout=timeout, check=False)
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
             raise NativeError("native adapter unavailable or timed out") from exc
         if reply.returncode:
             # Upstream errors may embed untrusted command text. Never forward them.
@@ -187,3 +187,61 @@ class NativeAtuin:
 
     def privacy(self, event: dict) -> dict:
         return self.native("filter", event)
+
+    def batch(self, operation: str, events: list[dict]) -> list[dict]:
+        """Run bounded native batches, retaining input order and exact IDs.
+
+        A refused batch may have committed a prefix before failing. Callers must
+        durably mark all submitted entries before invocation and reconcile every
+        uncertain entry on retry; no success is inferred from process failure.
+        """
+        if operation not in {"filter", "probe", "import"}:
+            raise ValueError("unsupported native batch operation")
+        results: list[dict] = []
+        pending: list[dict] = []
+        size = len('{"events": []}')
+
+        def flush():
+            nonlocal pending, size
+            if not pending:
+                return
+            timeout = 120 if any(event.get("reconcile") for event in pending) else 10
+            reply = self.native(operation + "_batch", {"events": pending}, timeout=timeout)
+            values = reply.get("results")
+            if not isinstance(values, list) or len(values) != len(pending) or not all(isinstance(value, dict) for value in values):
+                raise NativeError("invalid native batch response")
+            results.extend(values)
+            pending = []
+            size = len('{"events": []}')
+
+        for event in events:
+            encoded_size = len(json.dumps(event, ensure_ascii=False).encode("utf-8"))
+            if encoded_size + len('{"events": []}') > 1_048_576:
+                # JSON escapes can expand a valid 256 KiB control-heavy command
+                # beyond the batch budget. Preserve the existing single-event
+                # representation limit rather than discarding that command.
+                if encoded_size > 2_097_152:
+                    raise NativeError("event exceeds native representation bound")
+                flush()
+                timeout = 120 if event.get("reconcile") else 10
+                results.append(self.native(operation, event, timeout=timeout))
+                continue
+            # Recovery may decrypt the complete native record stream for this
+            # ID. Give each uncertain entry its own bounded recovery deadline.
+            if event.get("reconcile"):
+                flush()
+                pending = [event]
+                size += encoded_size
+                flush()
+                continue
+            extra = encoded_size + (2 if pending else 0)
+            if len(pending) == 64 or size + extra > 1_048_576:
+                flush()
+                extra = encoded_size
+            pending.append(event)
+            size += extra
+        flush()
+        return results
+
+    def privacy_batch(self, events: list[dict]) -> list[dict]:
+        return self.batch("filter", events)

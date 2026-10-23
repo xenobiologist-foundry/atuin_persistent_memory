@@ -85,7 +85,9 @@ class OpenSSHCompatibility(unittest.TestCase):
         return client
 
     def enter_destination(self, client, args):
-        client.send(shlex.join(["ssh", *args]) + "\n")
+        prefix = (["atuin-ssh", "connect", "--bash", "--"]
+                  if os.environ.get("ATUIN_SSH_TEST_FORCE_BASH") == "1" else ["ssh"])
+        client.send(shlex.join([*prefix, *args]) + "\n")
         client.drain(.35)
         token = uuid.uuid4().hex
         client.send("PS1='__SSH_DEST__> '; printf '\\n__SSH_DEST_" + token + "__\\n'\n")

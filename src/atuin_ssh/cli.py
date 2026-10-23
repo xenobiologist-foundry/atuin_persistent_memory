@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 import tomllib
 
 from . import __version__
@@ -65,6 +66,56 @@ def doctor():
     return 0 if all(disabled.values()) and "18.24.1" in report["atuin"] else 1
 
 
+def _history_progress():
+    last_phase, last_output = None, 0.0
+
+    def notify(value):
+        nonlocal last_phase, last_output
+        phase = value["phase"]
+        now = time.monotonic()
+        done = value.get("processed") == value.get("total")
+        if phase == last_phase and now - last_output < 0.5 and not done:
+            return
+        if phase == "fetch":
+            message = "Reading remote Bash history using SSH; authentication may be required."
+        elif phase == "wait":
+            message = "Waiting for the active history import to finish."
+        else:
+            label = {"privacy": "Checking privacy", "preflight": "Checking native history",
+                     "write": "Writing native Atuin history"}[phase]
+            message = f"{label}: {value['processed']}/{value['total']}"
+            if phase == "write":
+                message += f"; {value['imported']} entries confirmed in this run"
+        print(message, file=sys.stderr, flush=True)
+        last_phase, last_output = phase, now
+
+    return notify
+
+
+def _history_action(args):
+    progress = _history_progress()
+    if args.history_action == "retry":
+        from .history import Outbox
+        writer = Outbox()
+        try:
+            writer.retry_failed()
+            ready = writer.barrier(timeout=max(0.1, min(60, args.timeout)))
+            result = {"visible": ready, **writer.status()}
+        finally:
+            writer.close()
+    elif args.history_action == "resume-imports":
+        from .importing import ImportLedger
+        result = ImportLedger().resume(progress=progress)
+    else:
+        from .importing import import_history
+        result = import_history(args.target, dry_run=args.dry_run,
+                                max_entries=args.max_entries, max_bytes=args.max_bytes,
+                                after_ns=args.after_ns, before_ns=args.before_ns,
+                                progress=progress)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="atuin-ssh")
     parser.add_argument("--version", action="version", version=__version__)
@@ -72,6 +123,8 @@ def main(argv=None):
     init = sub.add_parser("init")
     init.add_argument("shell", choices=["bash"])
     connect = sub.add_parser("connect")
+    connect.add_argument("--bash", action="store_true",
+                         help="use the destination's existing Bash for this session, without changing its login shell")
     connect.add_argument("ssh_args", nargs=argparse.REMAINDER)
     sub.add_parser("doctor")
     history = sub.add_parser("history")
@@ -93,25 +146,24 @@ def main(argv=None):
     if args.action == "doctor":
         return doctor()
     if args.action == "history":
-        if args.history_action == "retry":
-            from .history import Outbox
-            writer = Outbox()
-            try:
-                writer.retry_failed()
-                ready = writer.barrier(timeout=max(0.1, min(60, args.timeout)))
-                result = {"visible": ready, **writer.status()}
-            finally:
-                writer.close()
-        elif args.history_action == "resume-imports":
-            from .importing import ImportLedger
-            result = ImportLedger().resume()
-        else:
-            from .importing import import_history
-            result = import_history(args.target, dry_run=args.dry_run,
-                                    max_entries=args.max_entries, max_bytes=args.max_bytes,
-                                    after_ns=args.after_ns, before_ns=args.before_ns)
-        print(json.dumps(result, indent=2))
-        return 0
+        from .atuin import NativeError
+        try:
+            return _history_action(args)
+        except KeyboardInterrupt:
+            if args.history_action in {"import", "resume-imports"}:
+                print("Import canceled. Completed writes are retained. Resume saved pending entries with "
+                      "`atuin-ssh history resume-imports`.", file=sys.stderr, flush=True)
+            return 130
+        except NativeError as error:
+            print(f"History operation failed: {error}. Saved pending entries are retained.", file=sys.stderr)
+            return 1
+        except ValueError:
+            # UnicodeDecodeError can embed source bytes in its representation.
+            print("History source is invalid or exceeds the requested bounds.", file=sys.stderr)
+            return 2
+        except (OSError, sqlite3.Error):
+            print("History operation could not read or update its local state or SSH process.", file=sys.stderr)
+            return 1
     if args.action == "connect":
         from .ssh import plan_invocation
         raw = args.ssh_args
@@ -129,7 +181,7 @@ def main(argv=None):
         except (ImportError, OSError, TypeError):
             pass
         try:
-            return Relay(raw, outbox=outbox, connection=plan).run()
+            return Relay(raw, outbox=outbox, connection=plan, force_bash=args.bash).run()
         except KeyboardInterrupt:
             return 130
 

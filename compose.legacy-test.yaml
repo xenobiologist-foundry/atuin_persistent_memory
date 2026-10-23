@@ -1,0 +1,24 @@
+# Use with: docker compose -f compose.test.yaml -f compose.legacy-test.yaml ...
+# Diagnostic tags and independent project volumes; production stays untouched.
+name: atuin-ssh-legacy-check
+services:
+  keys:
+    image: atuin-ssh:review-legacy-test
+    build:
+      target: legacy-test
+  destination:
+    image: atuin-ssh:destination-bash44-test
+    build:
+      target: destination-bash44
+  hub:
+    image: atuin-ssh:review-runtime
+    ports: !override
+      - "127.0.0.1:${LEGACY_TEST_HUB_PORT:-22225}:22"
+  client:
+    image: atuin-ssh:review-legacy-test
+    build:
+      target: legacy-test
+    environment:
+      ATUIN_SSH_TEST_FORCE_BASH: "1"
+  import-client:
+    image: atuin-ssh:review-legacy-test

@@ -4,38 +4,82 @@ import os
 import shlex
 
 
-def remote_command(nonce: str, session: str) -> str:
+def remote_command(nonce: str, session: str, *, force_bash: bool = False) -> str:
     payload = files("atuin_ssh").joinpath("bash/remote.bash").read_text()
     payload = payload.replace("@NONCE@", nonce).replace("@SESSION@", session)
+    payload = payload.replace("@MIN_BASH_MAJOR@", "4" if force_bash else "5")
     payload = payload.replace("@BIND_CTRL_R@", "0" if os.environ.get("ATUIN_SSH_DISABLE_CTRL_R") == "1" else "1")
     payload = payload.replace("@BIND_UP@", "0" if os.environ.get("ATUIN_SSH_DISABLE_UP") == "1" else "1")
-    # An exported first-prompt function lets a real login Bash load its normal
-    # profiles exactly once. A profile replacing PROMPT_COMMAND can disable the
-    # bootstrap, in which case this remains an ordinary login shell.
-    # Remove only our hook. Profiles may append scalar commands or array
-    # elements; deleting the entire PROMPT_COMMAND would erase their work.
-    hook = '_as_boot "$(trap -p DEBUG)"'
-    remove_hook = r'''if ! (unset PROMPT_COMMAND 2>/dev/null); then return; fi
-_AS_ORIGINAL_DEBUG=${1-}
-if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == 'declare -a '* ]]; then
-    for _as_pc_index in "${!PROMPT_COMMAND[@]}"; do
-        if [[ ${PROMPT_COMMAND[_as_pc_index]} == @HOOK@ ]]; then
-            unset 'PROMPT_COMMAND[_as_pc_index]'
-        fi
-    done
-    unset _as_pc_index
-elif [[ ${PROMPT_COMMAND-} == @HOOK@ ]]; then
-    unset PROMPT_COMMAND
-elif [[ ${PROMPT_COMMAND-} == @HOOK@';'* ]]; then
-    PROMPT_COMMAND=${PROMPT_COMMAND#@HOOK@';'}
-elif [[ ${PROMPT_COMMAND-} == @HOOK@$'\n'* ]]; then
-    PROMPT_COMMAND=${PROMPT_COMMAND#@HOOK@$'\n'}
+    unsupported_version = ("BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4)"
+                           if force_bash else "BASH_VERSINFO[0] < 5")
+    version_notice = ("atuin-ssh: Bash 4.4 or newer is required for requested native history integration; continuing with an ordinary Bash login shell"
+                      if force_bash else
+                      "atuin-ssh: Bash 5 or newer is required for native history integration; continuing with an ordinary Bash login shell")
+    # Bash 4.4 has no EPOCHREALTIME. Verify a usable native date component
+    # before exporting the hook, so an unsupported clock stays an ordinary
+    # login session instead of installing capture with fabricated timestamps.
+    clock_preflight = r'''if (( BASH_VERSINFO[0] == 4 )); then
+    if ! _as_clock_probe=$(command date '+%s %N' 2>/dev/null) || [[ ! $_as_clock_probe =~ ^([0-9]{1,12})\ ([0-9]{1,9})$ ]]; then
+        printf '%s\n' 'atuin-ssh: Bash 4.4 clock support is unavailable; continuing with an ordinary Bash login shell' >&2
+        exec bash --login -i
+    fi
+    unset _as_clock_probe
 fi
-unset -f _as_boot
 '''
-    install = remove_hook.replace("@HOOK@", shlex.quote(hook)) + payload
-    launcher = ("if [[ ${SHELL##*/} != bash ]]; then exec \"$SHELL\" -l; fi; "
-                "_as_boot() { " + install + "\n}; export -f _as_boot; "
-                "export PROMPT_COMMAND=" + shlex.quote(hook) + "; exec bash --login -i")
-    fallback = 'if command -v bash >/dev/null 2>&1; then exec bash -c ' + shlex.quote(launcher) + '; else exec "$SHELL" -l; fi'
+    launcher = ("if (( " + unsupported_version + " )); then "
+                "printf '%s\\n' " + shlex.quote(version_notice) + " >&2; "
+                "exec bash --login -i; fi; " + clock_preflight)
+    # POSIX ENV provides a real login Bash with a separate initialization
+    # descriptor. Leave POSIX mode BEFORE reading ordinary login profiles,
+    # then compose their final PROMPT_COMMAND before its first execution.
+    # No code passes through terminal input and no destination file is created.
+    initialization = r'''set +o posix
+[[ $_AS_BOOT_ERREXIT == 1 ]] || shopt -u inherit_errexit
+if [[ $_AS_BOOT_ENV_SET == x ]]; then export ENV=$_AS_BOOT_ENV_VALUE; else unset ENV; fi
+if [[ $_AS_BOOT_DEFAULT_HISTFILE == 1 ]]; then HISTFILE=$HOME/.bash_history; export -n HISTFILE; fi
+exec {_AS_BOOT_FD}<&-
+unset _AS_BOOT_FD _AS_BOOT_ERREXIT _AS_BOOT_ENV_SET _AS_BOOT_ENV_VALUE _AS_BOOT_DEFAULT_HISTFILE POSIXLY_CORRECT
+[[ ! -r /etc/profile ]] || builtin source /etc/profile
+for _as_startup_file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+    if [[ -r $_as_startup_file ]]; then builtin source "$_as_startup_file"; break; fi
+done
+unset _as_startup_file
+_AS_ORIGINAL_DEBUG=$(trap -p DEBUG)
+''' + payload
+    launcher += r'''if [[ -o posix || ${POSIXLY_CORRECT+x} ]]; then
+    printf '%s\n' 'atuin-ssh: existing POSIX Bash startup is unsupported for native integration; continuing with an ordinary Bash login shell' >&2
+    exec bash --login -i
+fi
+if ! (unset ENV 2>/dev/null); then
+    printf '%s\n' 'atuin-ssh: readonly ENV prevents temporary Bash initialization; continuing with an ordinary Bash login shell' >&2
+    exec bash --login -i
+fi
+export _AS_BOOT_ENV_SET='' _AS_BOOT_ENV_VALUE='' _AS_BOOT_ERREXIT=0 _AS_BOOT_DEFAULT_HISTFILE=1
+if [[ ${ENV+x} && $(declare -p ENV 2>/dev/null) =~ ^declare\ -[a-z]*x[a-z]*\ ENV= ]]; then
+    export _AS_BOOT_ENV_SET=x _AS_BOOT_ENV_VALUE=$ENV
+fi
+if [[ $(declare -p BASHOPTS 2>/dev/null) =~ ^declare\ -[a-z]*x[a-z]*\ BASHOPTS= ]] && shopt -q inherit_errexit; then
+    export _AS_BOOT_ERREXIT=1
+fi
+if [[ ${HISTFILE+x} && $(declare -p HISTFILE 2>/dev/null) =~ ^declare\ -[a-z]*x[a-z]*\ HISTFILE= ]]; then
+    export _AS_BOOT_DEFAULT_HISTFILE=0
+fi
+unset _AS_BOOT_FD
+if ! exec {_AS_BOOT_FD}< <(printf %s ''' + shlex.quote(initialization) + r''') || [[ ! -r /dev/fd/$_AS_BOOT_FD ]]; then
+    [[ -z ${_AS_BOOT_FD-} ]] || exec {_AS_BOOT_FD}<&-
+    unset _AS_BOOT_FD _AS_BOOT_ERREXIT _AS_BOOT_ENV_SET _AS_BOOT_ENV_VALUE _AS_BOOT_DEFAULT_HISTFILE
+    printf '%s\n' 'atuin-ssh: temporary Bash initialization descriptor is unavailable; continuing with an ordinary Bash login shell' >&2
+    exec bash --login -i
+fi
+export _AS_BOOT_FD
+ENV=/dev/fd/$_AS_BOOT_FD exec bash --posix --login -i
+'''
+    shell_guard = ("" if force_bash else
+                   "case ${SHELL##*/} in bash) ;; *) "
+                   "printf '%s\\n' 'atuin-ssh: configured login shell is not Bash; native history integration is unavailable, continuing with the ordinary login shell' >&2; "
+                   "exec \"$SHELL\" -l ;; esac; ")
+    missing_bash_notice = ("printf '%s\\n' 'atuin-ssh: requested temporary Bash is unavailable; continuing with the ordinary login shell' >&2; "
+                           if force_bash else "")
+    fallback = (shell_guard + 'if command -v bash >/dev/null 2>&1; then exec bash -c '
+                + shlex.quote(launcher) + '; else ' + missing_bash_notice + 'exec "$SHELL" -l; fi')
     return "sh -c " + shlex.quote(fallback)

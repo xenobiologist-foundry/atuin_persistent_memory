@@ -30,6 +30,14 @@ ssh -p 2222 hubuser@localhost
 ```
 
 If needed, generate a workstation SSH key using `ssh-keygen -t ed25519` first.
+For a custom key name, pass the matching **private** filename to the SSH client.
+For example, if setup used `atuin_hub_ed25519.pub`, connect with:
+
+```powershell
+ssh -i "$HOME/.ssh/atuin_hub_ed25519" -p 2222 hubuser@localhost
+```
+
+The `.pub` file authorizes the key on the hub; it is not the client identity file.
 Check the hub's host fingerprint against
 `docker compose exec hub ssh-keygen -lf /state/sshd/ssh_host_ed25519_key.pub`
 before accepting it. The image never contains authorized keys or private state.
@@ -47,6 +55,22 @@ The image is Linux/amd64. Native Linux Docker Engine execution is a separate
 manual verification gate until recorded in the acceptance status.
 
 ## Destination credentials and daily use
+
+Automatic enhancement uses the destination's configured Bash login shell and
+**Bash 5 or later**. For an account configured with `/bin/sh`, or one using
+**Bash 4.4**, explicitly select its existing Bash for this session from the hub:
+
+```sh
+atuin-ssh connect --bash -- myserver
+```
+
+This requires Bash 4.4 or newer; Bash 4.4 also needs the existing `date` utility
+to support `+%s %N`. The account's configured shell and profiles are not changed.
+Ordinary `ssh` preserves unsupported account shells. Starting a nested Bash
+later does not install the session integration.
+The ordinary `ssh` wrapper forwards the hub's native disabled-binding choices.
+For a direct `atuin-ssh connect` invocation, export
+`ATUIN_SSH_DISABLE_CTRL_R=1` or `ATUIN_SSH_DISABLE_UP=1` to disable those bindings.
 
 At the hub prompt, create a dedicated outbound key with `ssh-keygen -t ed25519`.
 Add its public key to the destination account through your usual authorized
@@ -81,6 +105,50 @@ Keep `auto_sync=false` and `update_check=false`. Existing customization survives
 restart. Do not import login credentials or attach cloned native writer state to
 two running independent hubs. Daemon search is currently disabled and requires
 separate compatibility verification.
+
+## Troubleshooting an onward session
+
+A normal destination prompt after `ssh myserver` is expected. Press **Up** or
+**Ctrl-R** at that prompt to open native Atuin; the interface is displayed only
+while searching. A successful login alone does not prove that enhancement loaded.
+
+Check the destination's existing shell and Bash version:
+
+```sh
+printf 'Login shell: %s\n' "$SHELL"
+command -v bash
+bash --version
+```
+
+Ordinary `ssh` preserves a non-Bash login shell. Use the explicit `--bash` form
+above to select an existing compatible Bash. A Bash 4.4.23 destination with a
+`/bin/sh` account originally stayed plain; that report prompted the explicit
+compatibility path. A separate Bash 5.2.21 destination passed user-confirmed
+Ctrl-R and capture. These checks do not install anything; the integration remains
+session-only on the destination.
+
+At the actual **hub prompt**, `type -t ssh` should report `function` for the
+installed wrapper. Run `atuin-ssh doctor` there to check the interactive session.
+An existing custom `ssh` function may be preserved instead; try
+`atuin-ssh connect -- myserver` in that case. The PowerShell/Linux helper's
+`doctor` action runs noninteractively, so its `tty`, `native_integration` and
+`ssh_wrapper` fields can correctly be `false` even when an interactive login works.
+
+History captured on a destination is stored with that destination's account and
+host context. Native search opened at the hub defaults to the hub's **HOST**
+scope, which can hide those remote entries. To inspect all local native history
+from the hub, open:
+
+```sh
+atuin search -i --filter-mode global
+```
+
+The onward widget uses its remote context automatically. If Up/Ctrl-R still use
+ordinary Bash history, retain the exact `atuin-ssh:` notice and sanitized doctor
+output. Custom Readline bindings, incompatible DEBUG hooks, another nested shell
+or a login profile replacing the bootstrap hook can prevent enhancement. Do not
+share history databases, terminal transcripts, private keys or full environments
+when reporting the problem.
 
 ## Development and verification
 
@@ -117,6 +185,23 @@ are identified in the provenance ledger. Repeat imports align occurrences,
 including repeated equal commands, rather than deduplicating command text.
 Unresolvable native uniqueness collisions remain pending. Review dry-run
 limitations and [compatibility](docs/COMPATIBILITY.md) before bulk imports.
+Keep the same time bounds and privacy settings when relying on occurrence
+alignment: narrowing and later widening the accepted snapshot can lose earlier
+alignment, particularly for entries without original timestamps.
+Use the same `--target` spelling too: different SSH aliases currently identify
+separate import sources, even when they reach one machine. Untimestamped entries
+can duplicate in that case. Timestamped native uniqueness conflicts stay pending.
+The native records retain the destination's actual hostname and account. Import
+is explicit; connecting does not automatically scan a destination's old history.
+
+Progress appears on stderr during reading, privacy checks, preflight and native
+writes; stdout contains the final JSON report. Ctrl-C stops the operation with
+exit status 130 and retains completed writes and privacy-approved pending work.
+Run `atuin-ssh history resume-imports` explicitly to continue saved work without
+another SSH connection or password prompt. An interrupted native write is checked
+by its original stable ID before retrying. Recovery also honors native deletions.
+An earlier version could import silently for a long time and show non-TTY Bash
+job-control warnings; rebuild the image to get progress and the faster batch path.
 With `store_failed=false`, unknown historical outcomes are pending without a
 locally retained command payload. Importing them requires an explicit policy
 change and another fetch; no historical success status is invented. Live

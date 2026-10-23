@@ -25,6 +25,21 @@ from .protocol import Frame, FrameParser, response
 
 LIMIT = 1_048_576
 
+# Render only known local explanations. Remote text can contain terminal
+# controls or command data and must never be copied into a diagnostic notice.
+DEGRADED_REASONS = {
+    "Accepted command exceeds capture bound.":
+        "accepted command exceeds the 256 KiB capture bound; this command was not recorded",
+    "Accepted history expansion unavailable; command capture skipped.":
+        "Bash history expansion unavailable; this command was not recorded",
+    "Complex HISTIGNORE: repeated-command capture unavailable; native history exclusions preserved.":
+        "complex HISTIGNORE pattern prevents repeated-command capture; native exclusions were preserved",
+    "DEBUG hook replaced: capture and native hub keys disabled for this shell.":
+        "destination DEBUG hook was replaced; capture and native history keys are disabled",
+    "Existing DEBUG trap/functrace: capture and native hub keys unavailable for this shell.":
+        "destination has an existing DEBUG trap or functrace; capture and native history keys are disabled",
+}
+
 
 class State(Enum):
     BOOTSTRAP = "authentication/bootstrap"
@@ -72,10 +87,10 @@ def _write(fd, buffer):
 
 
 class Relay:
-    def __init__(self, argv, *, native=None, outbox=None, connection=None):
+    def __init__(self, argv, *, native=None, outbox=None, connection=None, force_bash=False):
         self.nonce = uuid.uuid4().hex
         self.session = uuid.uuid7().hex
-        self.argv = ["/usr/bin/ssh", *argv, remote_command(self.nonce, self.session)]
+        self.argv = ["/usr/bin/ssh", *argv, remote_command(self.nonce, self.session, force_bash=force_bash)]
         # Force a remote PTY only for eligible shell invocations.
         self.argv.insert(1, "-tt")
         self.native = native or NativeAtuin()
@@ -90,6 +105,7 @@ class Relay:
                 self.connection_registry = None
         self.parser = FrameParser(self.nonce)
         self.state = State.BOOTSTRAP
+        self.handshake_seen = False
         self.request = None
         self.last_request = 0
         self.completed_request = 0
@@ -165,9 +181,14 @@ class Relay:
             # Only the remote callback can assert ownership. It returns all
             # type-ahead preceding the fence in the SSH input byte stream.
             self.open_widget(fields[1].encode("utf-8", "surrogateescape"))
-        elif event.kind == "HELLO" and self.state == State.BOOTSTRAP:
-            self.state = State.PROMPT
-            if self.connection_registry and len(fields) >= 5 and fields[3] == self.session:
+        elif (event.kind == "HELLO" and not self.handshake_seen and len(fields) == 5
+              and fields[3] == self.session and fields[4] == "bash"):
+            # A pre-existing hook emits DEGRADED before HELLO. Its actual
+            # origin still belongs in provenance, without claiming enhancement.
+            self.handshake_seen = True
+            if self.state == State.BOOTSTRAP:
+                self.state = State.PROMPT
+            if self.connection_registry:
                 try:
                     self.connection_registry.origin(self.session, fields[0], fields[1])
                 except Exception:
@@ -189,7 +210,8 @@ class Relay:
                 self.outbox_event(event)
         elif event.kind == "DEGRADED":
             self.state = State.DEGRADED
-            self.notice("destination integration degraded; unsupported capture or history keys use ordinary Bash behavior")
+            reason = DEGRADED_REASONS.get(fields[0]) if len(fields) == 1 else None
+            self.notice(reason or "destination integration degraded; unsupported capture or history keys use ordinary Bash behavior")
 
     def outbox_event(self, event):
         try:
