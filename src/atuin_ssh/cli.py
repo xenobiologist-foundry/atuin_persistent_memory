@@ -46,6 +46,7 @@ def doctor():
         "scope": "ACCOUNT/HOST/SESSION/DIRECTORY/WORKSPACE/GLOBAL" if shutil.which("atuin-ssh-search") else "stock host fallback: exact account scope unavailable",
         "native_helper": bool(shutil.which("atuin-ssh-native")),
         "native_search": bool(shutil.which("atuin-ssh-search")),
+        "identity_boundary": "connection aliases/effective endpoints retained separately; isolation of different machines with identical native hostnames is pending",
         "layout": "one local native store; local or LAN ingress selected by Compose bind address",
         "pending": "inspect bridge outbox status; no command text included",
     }
@@ -128,7 +129,7 @@ def main(argv=None):
         except (ImportError, OSError, TypeError):
             pass
         try:
-            return Relay(raw, outbox=outbox).run()
+            return Relay(raw, outbox=outbox, connection=plan).run()
         except KeyboardInterrupt:
             return 130
 

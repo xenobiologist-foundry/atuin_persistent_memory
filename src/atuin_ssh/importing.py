@@ -7,6 +7,7 @@ Native ignored uniqueness inserts remain pending collisions, never successes.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
 from difflib import SequenceMatcher
 import hashlib
 import json
@@ -36,7 +37,10 @@ def parse_bash_history(raw: bytes, max_entries: int = 100_000) -> list[HistoryEn
     if b"\0" in raw:
         raise ValueError("Bash history contains an unrepresentable NUL")
     text = raw.decode("utf-8", "strict")
-    lines = text.splitlines(keepends=True)
+    # Bash history delimiters are LF bytes. Unicode line separators, CR, VT,
+    # and FF may be literal command data and must not create new records.
+    pieces = text.split("\n")
+    lines = [line + "\n" for line in pieces[:-1]] + (pieces[-1:] if pieces[-1] else [])
     entries = []
     timestamp = None
     pending: list[str] = []
@@ -91,6 +95,7 @@ def fetch_history(target: str, *, max_bytes: int = 16 * 1024 * 1024,
     command = "bash -lic " + shlex.quote(script)
     process = subprocess.Popen(["/usr/bin/ssh", *(ssh_options or []), "--", target, command], stdout=subprocess.PIPE)
     # Bound startup output as well as content. Refuse noisy/unbounded startup.
+    selector = None
     try:
         assert process.stdout is not None
         selector = selectors.DefaultSelector()
@@ -109,7 +114,6 @@ def fetch_history(target: str, *, max_bytes: int = 16 * 1024 * 1024,
                 output.extend(chunk)
                 if len(output) >= max_bytes + 65_536:
                     raise ValueError("remote startup/history exceeds byte limit")
-        selector.close()
         status = process.wait(timeout=5)
     except BaseException:
         process.terminate()
@@ -118,6 +122,11 @@ def fetch_history(target: str, *, max_bytes: int = 16 * 1024 * 1024,
         except subprocess.TimeoutExpired:
             process.kill()
         raise
+    finally:
+        if selector is not None:
+            selector.close()
+        if process.stdout is not None:
+            process.stdout.close()
     marker = b"\0atuin-ssh-import-" + nonce.encode() + b"\0"
     position = output.find(marker)
     if status or position < 0:
@@ -154,12 +163,20 @@ class ImportLedger:
                 );
             """)
 
+    @contextmanager
     def _db(self):
         db = sqlite3.connect(self.path, timeout=1)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA journal_mode=WAL")
-        db.execute("PRAGMA synchronous=FULL")
-        return db
+        try:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA synchronous=FULL")
+            yield db
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def import_bytes(self, source: dict, raw: bytes, *, dry_run: bool = False,
                      max_entries: int = 100_000, max_bytes: int = 16 * 1024 * 1024,
@@ -171,6 +188,7 @@ class ImportLedger:
         report = {"source": source, "parsed": len(entries), "ambiguous": 0, "synthetic_timestamps": 0,
                   "filtered": 0, "outside_time_bounds": 0, "duplicates": 0,
                   "imported": 0, "pending": 0, "prospective_collisions": 0,
+                  "pending_without_payload": 0,
                   "dry_run": dry_run, "limitations": ["Commands held only in other shells' memory are absent.",
                     "Untimestamped multiline boundaries are ambiguous.",
                     "Snapshot rotation with identical repeated occurrences can have ambiguous alignment."]}
@@ -188,8 +206,12 @@ class ImportLedger:
                 continue
             payload = {"id": uuid.uuid4().hex, "host": source["host"], "user": source["user"],
                        "cwd": "unknown", "session": "unknown", "shell": "bash", "command": entry.command,
-                       "timestamp_ns": entry.timestamp_ns or str(base_time + index), "duration_ns": -1}
-            if not self.native.allowed(payload):
+                       "timestamp_ns": entry.timestamp_ns or str(base_time + index), "duration_ns": -1, "historical": True}
+            policy = self.native.privacy(payload) if hasattr(self.native, "privacy") else {"allowed": self.native.allowed(payload)}
+            if policy.get("pending_unknown_outcome"):
+                report["pending_without_payload"] += 1
+                continue
+            if not policy.get("allowed"):
                 report["filtered"] += 1
                 continue
             fingerprint = hashlib.sha256(json.dumps([entry.timestamp_ns, entry.command], ensure_ascii=False).encode()).hexdigest()
@@ -234,8 +256,11 @@ class ImportLedger:
                            (source_id, json.dumps(new_snapshot), "timestamp-delimited or explicitly ambiguous"))
         if not dry_run:
             self.resume(source_id, report)
+            report["pending"] += report["pending_without_payload"]
         else:
-            report["pending"] = len(accepted) - report["duplicates"]
+            report["pending"] = len(accepted) - report["duplicates"] + report["pending_without_payload"]
+        if report["pending_without_payload"]:
+            report["limitations"].append("store_failed=false cannot classify unknown historical exits; these entries have no durable local payload. The source remains unchanged and must be fetched again after an explicit policy change.")
         return report
 
     def resume(self, source_id: str | None = None, report: dict | None = None) -> dict:

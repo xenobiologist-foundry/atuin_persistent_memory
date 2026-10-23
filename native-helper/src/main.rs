@@ -25,6 +25,7 @@ struct Event {
     status: Option<i64>,
     duration_ns: Option<i64>,
     #[serde(default)] reconcile: bool,
+    #[serde(default)] historical: bool,
 }
 fn bash() -> String { "bash".into() }
 fn zero() -> String { "0".into() }
@@ -114,9 +115,17 @@ async fn run(operation: &str, event: Event) -> Result<Value> {
         return Ok(json!({"state": "filtered"}));
     }
     let h = history(&event)?;
-    let allowed = h.should_save(&settings) && (settings.store_failed || event.status.is_none_or(|s| s <= 0));
-    if operation == "filter" { return Ok(json!({"allowed": allowed, "version": "18.24.1"})); }
+    let passes_command_filters = h.should_save(&settings);
+    let historical = event.historical || operation == "import";
+    let unknown_outcome = event.status.is_none_or(|s| s < 0);
+    let pending_unknown_outcome = passes_command_filters && !settings.store_failed && historical && unknown_outcome;
+    let allowed = passes_command_filters && !pending_unknown_outcome && (settings.store_failed || event.status.is_none_or(|s| s <= 0));
+    let defer_until_completion = !settings.store_failed && unknown_outcome && !historical;
+    if operation == "filter" { return Ok(json!({"allowed": allowed, "defer_until_completion": defer_until_completion,
+        "pending_unknown_outcome": pending_unknown_outcome, "version": "18.24.1"})); }
+    if pending_unknown_outcome { return Ok(json!({"state": "pending_unknown_outcome"})); }
     if !allowed { return Ok(json!({"state": "filtered"})); }
+    if ["start", "write"].contains(&operation) && defer_until_completion { return Ok(json!({"state": "deferred", "id": h.id.to_string()})); }
     if !["start", "write", "import", "probe"].contains(&operation) { bail!("unsupported operation"); }
     if event.id.is_empty() { bail!("stable native identity required"); }
     if settings.daemon.enabled { bail!("native adapter daemon mode not yet verified"); }

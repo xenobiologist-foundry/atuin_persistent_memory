@@ -15,14 +15,18 @@ import time
 
 
 class PTYClient:
-    def __init__(self, argv: list[str], *, rows: int = 36, columns: int = 140):
+    def __init__(self, argv: list[str], *, rows: int = 36, columns: int = 140,
+                 env: dict[str, str] | None = None):
         self.pid, self.fd = pty.fork()
         if not self.pid:
             os.environ["TERM"] = "xterm-256color"
             os.environ["LC_ALL"] = "C.UTF-8"
-            os.execv(argv[0], argv)
+            if env:
+                os.environ.update(env)
+            os.execvpe(argv[0], argv, os.environ)
         self.buffer = bytearray()
         self.transcript = bytearray()
+        self.query_tail = b""
         self.closed = False
         self.resize(rows, columns)
 
@@ -58,11 +62,18 @@ class PTYClient:
         # Disposable test transcripts are held in memory only. They are never a
         # runtime logging feature or a fixture containing production commands.
         self.transcript.extend(data)
-        # Act as a minimal terminal for crossterm's capability/cursor probes.
-        if b"\x1b[6n" in self.buffer[-len(data)-8:]:
-            self.send(b"\x1b[1;1R")
-        if b"\x1b[c" in self.buffer[-len(data)-8:]:
-            self.send(b"\x1b[?1;2c")
+        # A streaming recognizer must answer each terminal query exactly once.
+        # Keep only an unfinished query prefix across reads, never a completed
+        # query that could be answered again when unrelated output follows.
+        queries = {b"\x1b[6n": b"\x1b[1;1R", b"\x1b[c": b"\x1b[?1;2c"}
+        pending = self.query_tail + data
+        for found in re.finditer(rb"\x1b\[6n|\x1b\[c", pending):
+            self.send(queries[found[0]])
+        self.query_tail = b""
+        for length in range(1, 4):
+            suffix = pending[-length:]
+            if any(query.startswith(suffix) and len(suffix) < len(query) for query in queries):
+                self.query_tail = suffix
         return data
 
     def expect(self, pattern: bytes | re.Pattern[bytes], timeout: float = 10) -> re.Match[bytes]:

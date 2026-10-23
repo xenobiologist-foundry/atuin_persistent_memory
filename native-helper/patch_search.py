@@ -62,3 +62,42 @@ replace(search, '        settings.shell_up_key_binding = self.shell_up_key_bindi
             settings.search.filters.insert(0, FilterMode::Account);
         }
         settings.shell_up_key_binding = self.shell_up_key_binding;''')
+
+interactive = "crates/atuin/src/command/client/search/interactive.rs"
+replace(interactive, '''    let accept;
+    let result = 'render: loop {''', '''    let accept;
+    let mut atuin_ssh_ready_sent = false;
+    let result = 'render: loop {''')
+replace(interactive, '''        let initial_input = app.search.input.as_str().to_owned();''', '''        // Notify the owning relay only after terminal negotiation, the first
+        // native query, and the first complete results frame. Input sent before
+        // this point can be consumed by terminal setup rather than the widget.
+        if !atuin_ssh_ready_sent {
+            atuin_ssh_ready_sent = true;
+            if atuin_common::env::var("ATUIN_SSH_REMOTE_CONTEXT").as_deref() == Ok("1") {
+                if let Ok(fd) = atuin_common::env::var("ATUIN_SSH_READY_FD") {
+                    let fd: u32 = fd.parse()?;
+                    if fd < 3 { eyre::bail!("invalid widget readiness descriptor"); }
+                    use std::io::Write as _;
+                    let mut ready = std::fs::OpenOptions::new().write(true).open(format!("/proc/self/fd/{fd}"))?;
+                    ready.write_all(b"READY\\n")?;
+                    ready.flush()?;
+                }
+            }
+        }
+
+        let initial_input = app.search.input.as_str().to_owned();''')
+replace(interactive, '''fn selection_output(
+''', '''fn atuin_ssh_insert_output(command: String) -> String {
+    if !command.is_empty() && atuin_common::env::var("ATUIN_SSH_RESULT_PROTOCOL").as_deref() == Ok("2") {
+        format!("__atuin_insert__:{command}")
+    } else { command }
+}
+
+fn selection_output(
+''')
+replace(interactive, '''        Some(query) => format!("{} {command}", query.trim_end()),
+        None if accept => format!("{ACCEPT_PREFIX}{command}"),
+        None => command,''', '''        Some(query) => atuin_ssh_insert_output(format!("{} {command}", query.trim_end())),
+        None if accept => format!("{ACCEPT_PREFIX}{command}"),
+        None => atuin_ssh_insert_output(command),''')
+replace(interactive, '''            Ok(app.search.input.into_inner())''', '''            Ok(atuin_ssh_insert_output(app.search.input.into_inner()))''')

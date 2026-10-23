@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 ATUIN_VERSION = "18.24.1"
 ACCEPT_PREFIX = "__atuin_accept__:"
+INSERT_PREFIX = "__atuin_insert__:"
 MAX_COMMAND_BYTES = 262_144
 _QUERY_FDS: dict[str, int] = {}
 
@@ -68,13 +69,13 @@ class NativeAtuin:
         """Prepare native TUI; the relay owns spawning, PTY, bytes, and cleanup.
 
         --result-file writes exact bytes (including trailing LF), unlike command
-        substitution. Account/directory/workspace require the isolated native
-        extension; a missing extension never silently broadens a search.
+        substitution. Every remote widget requires the isolated extension's
+        unambiguous result tags; a missing component fails before allocation.
         """
         if keymap not in {"emacs", "vim-insert", "vim-normal", "auto"}:
             raise ValueError("unsupported Atuin keymap")
         if scope not in {"account", "host", "global", "session", "directory", "workspace"}:
-            raise ValueError("stock Atuin cannot express requested scope")
+            raise ValueError("unsupported native search scope")
         query_bytes = query.encode("utf-8", "strict")
         if len(query_bytes) > MAX_COMMAND_BYTES or b"\0" in query_bytes:
             raise ValueError("initial query exceeds supported representation")
@@ -85,10 +86,11 @@ class NativeAtuin:
         if search_binary:
             self.native("check", {})
             env["ATUIN_SSH_REMOTE_CONTEXT"] = "1"
+            env["ATUIN_SSH_RESULT_PROTOCOL"] = "2"
             env["ATUIN_SSH_REMOTE_WORKSPACE"] = context.workspace or ""
             env["ATUIN_WORKSPACES"] = "true" if context.workspace else "false"
-        elif scope in {"account", "directory", "workspace"}:
-            raise NativeError("exact remote native search extension unavailable")
+        else:
+            raise NativeError("remote native search compatibility component unavailable")
         fd, name = tempfile.mkstemp(prefix="atuin-ssh-result-", dir=runtime_dir)
         os.fchmod(fd, 0o600)
         os.close(fd)
@@ -111,7 +113,7 @@ class NativeAtuin:
                 if query_fd is not None:
                     os.close(query_fd)
                 raise
-        argv = [search_binary or self.binary, "search", "-i", "--filter-mode", scope,
+        argv = [search_binary, "search", "-i", "--filter-mode", scope,
                 "--keymap-mode", keymap, "--result-file", name]
         if up:
             argv.append("--shell-up-key-binding")
@@ -121,14 +123,24 @@ class NativeAtuin:
     def result(path: str | Path, returncode: int = 0) -> WidgetResult:
         target = Path(path)
         try:
-            if returncode or target.stat().st_size > MAX_COMMAND_BYTES:
+            if returncode or target.stat().st_size > MAX_COMMAND_BYTES + max(len(ACCEPT_PREFIX), len(INSERT_PREFIX)):
                 return WidgetResult("cancel")
             raw = target.read_bytes()
             if not raw or b"\0" in raw:
                 return WidgetResult("cancel")
             result = raw.decode("utf-8", "strict")
+            if result.startswith(INSERT_PREFIX):
+                command = result[len(INSERT_PREFIX):]
+                if len(command.encode("utf-8")) > MAX_COMMAND_BYTES:
+                    return WidgetResult("cancel")
+                return WidgetResult("insert", command)
             if result.startswith(ACCEPT_PREFIX):
-                return WidgetResult("accept", result[len(ACCEPT_PREFIX):])
+                command = result[len(ACCEPT_PREFIX):]
+                if len(command.encode("utf-8")) > MAX_COMMAND_BYTES:
+                    return WidgetResult("cancel")
+                return WidgetResult("accept", command)
+            if len(raw) > MAX_COMMAND_BYTES:
+                return WidgetResult("cancel")
             return WidgetResult("insert", result)
         except (OSError, UnicodeError):
             return WidgetResult("cancel")
@@ -145,9 +157,14 @@ class NativeAtuin:
         if query_fd is not None:
             os.close(query_fd)
 
-    def native(self, operation: str, event: dict, *, timeout: float = 10) -> dict:
+    def native(self, operation: str, event: dict, *, timeout: float | None = None) -> dict:
         if not shutil.which(self.helper):
             raise NativeError("version-pinned native adapter unavailable")
+        if timeout is None:
+            # Stable-ID recovery decrypts the native record stream. A measured
+            # million-record scan takes longer than the ordinary CLI deadline.
+            # Recovery runs in background workers, never on the relay byte path.
+            timeout = 120 if event.get("reconcile") else 10
         try:
             reply = subprocess.run([self.helper, operation], input=json.dumps(event),
                                    text=True, encoding="utf-8", capture_output=True,
@@ -166,4 +183,7 @@ class NativeAtuin:
             raise NativeError("invalid native adapter response") from exc
 
     def allowed(self, event: dict) -> bool:
-        return self.native("filter", event).get("allowed") is True
+        return self.privacy(event).get("allowed") is True
+
+    def privacy(self, event: dict) -> dict:
+        return self.native("filter", event)

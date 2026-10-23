@@ -26,12 +26,13 @@ from pty_client import PTYClient
 
 E2E = os.environ.get("ATUIN_SSH_E2E") == "1"
 PROMPT = b"__E2E_DEST__> "
+GEN_PROMPT = re.compile(rb"__E2E_GENERATION__([0-9]+)____E2E_DEST__> ")
 HUB_PROMPT = b"__E2E_HUB__> "
 SNAPSHOT = re.compile(rb"\r?\n__E2E_BUFFER__([0-9a-f]*):([0-9]+):(-?[0-9]+)__\r?\n")
 # Require the actual installed native UI header after its terminal mouse-mode
 # activation. Inline Atuin does not enter an alternate screen or hide cursor.
 NATIVE_UI = re.compile(rb"\x1b\[\?1000h.*?Atuin v18\.24\.1", re.S)
-SNAPSHOT_SETUP = r'''__e2e_buffer() { local h; h=$(printf %s "$READLINE_LINE" | od -An -v -tx1 | tr -d ' \n'); printf '\n__E2E_BUFFER__%s:%s:%s__\n' "$h" "$READLINE_POINT" "${READLINE_MARK:-0}"; }; bind -m emacs -x '"\C-x\C-o": __e2e_buffer'; bind -m vi-insert -x '"\C-x\C-o": __e2e_buffer'; bind -m vi-command -x '"\C-x\C-o": __e2e_buffer'; PS1='__E2E_DEST__> '; PS2='__E2E_MORE__> ' '''
+SNAPSHOT_SETUP = r'''__e2e_buffer() { local h; h=$(printf %s "$READLINE_LINE" | od -An -v -tx1 | tr -d ' \n'); printf '\n__E2E_BUFFER__%s:%s:%s__\n' "$h" "$READLINE_POINT" "${READLINE_MARK:-0}"; }; bind -m emacs -x '"\C-x\C-o": __e2e_buffer'; bind -m vi-insert -x '"\C-x\C-o": __e2e_buffer'; bind -m vi-command -x '"\C-x\C-o": __e2e_buffer'; __e2e_generation=0; PS1='__E2E_GENERATION__$((__e2e_generation+=1))____E2E_DEST__> '; PS2='__E2E_MORE__> ' '''
 
 
 @unittest.skipUnless(E2E, "disposable two-hop Compose fixture required (ATUIN_SSH_E2E=1)")
@@ -93,22 +94,34 @@ class TwoHopNativeWidget(unittest.TestCase):
         self.client.drain(.5)
         self.client.send(SNAPSHOT_SETUP + "; printf '\\n__E2E_SETUP_DONE__\\n'\n")
         self.client.expect(b"\r\n__E2E_SETUP_DONE__\r\n", timeout=30)
-        self.client.expect(PROMPT, timeout=30)
+        prompt = self.client.expect(GEN_PROMPT, timeout=30)
+        self.generation = int(prompt[1])
         self.client.buffer.clear()
 
     def snapshot(self) -> tuple[str, int, int]:
         self.client.send(b"\x18\x0f")
         found = self.client.expect(SNAPSHOT)
+        prompt = self.client.expect(GEN_PROMPT)
+        self.generation = max(self.generation, int(prompt[1]))
         return bytes.fromhex(found[1].decode()).decode(), int(found[2]), int(found[3])
 
     def command(self, command: str, timeout: float = 10) -> bytes:
         self.client.send(command + "\n")
-        found = self.client.expect(PROMPT, timeout=timeout)
-        return found.string[:found.start()]
+        # An accept-line bind-x may redraw the cached Readline prompt before
+        # Bash executes. Only expansion of a genuinely new PS1 increments this
+        # test-only counter; never append a command marker that changes history.
+        deadline = time.monotonic()+timeout
+        output = bytearray()
+        while True:
+            found = self.client.expect(GEN_PROMPT, timeout=max(.01, deadline-time.monotonic()))
+            output.extend(found.string[:found.start()])
+            if int(found[1]) > self.generation:
+                self.generation = int(found[1])
+                return bytes(output)
 
-    def seed(self, *, extra: str = "") -> tuple[str, str]:
+    def seed(self, *, extra: str = "", command_prefix: str = "") -> tuple[str, str]:
         token = "E2E_" + uuid.uuid4().hex
-        command = f"printf '\\n__RUN__%s\\n' {token}" + extra
+        command = command_prefix+f"printf '\\n__RUN__%s\\n' {token}" + extra
         # Seed through the *unmodified native CLI* on the hub. This separates
         # the defining widget gate from the later command-capture gate.
         host = os.environ.get("ATUIN_SSH_TEST_DEST", "destination")
@@ -205,6 +218,20 @@ class TwoHopNativeWidget(unittest.TestCase):
         output = self.client.expect(b"\r\n__SIZE_DONE__\r\n")
         self.assertIn(b"41 137", output.string)
 
+    def test_resize_during_native_ui_preserves_selection_and_remote_size(self):
+        token, command = self.seed(extra="; : 'é界'")
+        self.widget(query=token)
+        # SIGWINCH must reach the foreground native PTY while remote Bash is
+        # waiting, then the destination must receive the current size on return.
+        self.client.resize(43, 101)
+        self.client.drain(.1)
+        self.client.send(b"\t")
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], command)
+        self.client.send(b"\x01\x0b")
+        output = self.command("stty size")
+        self.assertIn(b"43 101\r\n", output)
+
     def test_shell_context_and_return_to_hub(self):
         output = self.command("printf '\\n__CONTEXT__%s:%s:%s__\\n' \"$(hostname)\" \"$(id -un)\" \"$PWD\"")
         self.assertIn(b"__CONTEXT__", output)
@@ -293,8 +320,14 @@ class TwoHopNativeWidget(unittest.TestCase):
         self.client.expect(PROMPT)
 
     def test_immediate_typeahead_with_150_and_300_ms_added_destination_rtt(self):
+        self.assert_delayed_destination_typeahead((150, 300))
+
+    def test_immediate_typeahead_with_50_ms_added_destination_rtt(self):
+        self.assert_delayed_destination_typeahead((50,))
+
+    def assert_delayed_destination_typeahead(self, rtts):
         code = base64.b64encode(Path(__file__).with_name("latency_proxy.py").read_bytes()).decode()
-        for rtt_ms in (150, 300):
+        for rtt_ms in rtts:
             with self.subTest(added_destination_rtt_ms=rtt_ms):
                 self.client.send("exit\n")
                 self.client.expect(b"Connection to destination closed.")
@@ -365,6 +398,85 @@ class TwoHopNativeWidget(unittest.TestCase):
         self.client.send(b"\t")
         self.client.expect(PROMPT)
         self.assertEqual(self.snapshot()[0], command)
+
+    def test_native_hub_disabled_bindings_are_preserved_on_destination(self):
+        self.client.send("exit\n")
+        self.client.expect(HUB_PROMPT)
+        self.client.send("__atuin_bind_ctrl_r=false; __atuin_bind_up_arrow=false; printf '\\n__DISABLED_SET__\\n'\n")
+        self.client.expect(b"\r\n__DISABLED_SET__\r\n")
+        self.client.expect(HUB_PROMPT)
+        self.enter_destination()
+        output = self.command("bind -q reverse-search-history")
+        self.assertIn(b"\\C-r", output)
+        self.client.send(b"\x12")
+        result = self.client.expect(b"reverse-i-search")
+        self.assertNotRegex(result.string, NATIVE_UI)
+        self.client.send(b"\x07")
+
+    def test_activation_query_navigation_and_tab_in_one_burst(self):
+        group = "NAVGROUP_"+uuid.uuid4().hex
+        _, command = self.seed(extra="; : "+group)
+        self.seed(extra="; : "+group)
+        # Atuin's native Down at the newest row exits with return-original.
+        # Use Up among two matches to exercise navigation without that action.
+        self.client.send(b"\x12"+group.encode()+b"\x1b[A\t")
+        self.client.expect(NATIVE_UI)
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], command)
+
+    def test_activation_query_and_enter_burst_executes_native_selection(self):
+        token, _ = self.seed()
+        self.seed()
+        self.client.send(b"\x12"+token.encode()+b"\r")
+        self.client.expect(NATIVE_UI)
+        self.client.expect(("__RUN__"+token+"\r\n").encode())
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], "")
+
+    def test_query_and_enter_burst_after_native_header(self):
+        token, _ = self.seed()
+        self.seed()
+        self.widget()
+        self.client.send(token.encode()+b"\r")
+        self.client.expect(("__RUN__"+token+"\r\n").encode())
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], "")
+
+    def test_selection_above_canonical_limit_preserves_unicode_quotes_and_trailing_lf(self):
+        payload = ("é界'\"\\literal\t\n"*1000)
+        token, command = self.seed(extra="; : "+shlex.quote(payload)+"\n\n")
+        self.assertGreater(len(command.encode()), 16_384)
+        self.assertLess(len(command.encode()), 65_536)
+        self.widget(query=token)
+        self.client.send(b"\t")
+        self.client.expect(PROMPT)
+        line, point, _ = self.snapshot()
+        self.assertEqual(line, command)
+        self.assertGreater(point, 4096)
+
+    def test_query_navigation_and_tab_burst_after_native_header(self):
+        group = "NAVGROUP_"+uuid.uuid4().hex
+        _, command = self.seed(extra="; : "+group)
+        self.seed(extra="; : "+group)
+        self.widget()
+        self.client.send(group.encode()+b"\x1b[A\t")
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], command)
+
+    def test_native_result_tags_preserve_literal_accept_prefix(self):
+        token, command = self.seed(command_prefix="__atuin_accept__:")
+        self.widget(query=token)
+        self.client.send(b"\t")
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], command)
+        self.client.send(b"\x01\x0b")
+        self.command("function __atuin_accept__:printf { printf '\\n__LITERAL_PREFIX_USED__\\n'; builtin printf \"$@\"; }")
+        self.widget(query=token)
+        self.client.send(b"\r")
+        self.client.expect(b"\r\n__LITERAL_PREFIX_USED__\r\n")
+        self.client.expect(("__RUN__"+token+"\r\n").encode())
+        self.client.expect(PROMPT)
+        self.assertEqual(self.snapshot()[0], "")
 
 
 if __name__ == "__main__":
