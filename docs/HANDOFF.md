@@ -14,13 +14,38 @@ returns insert/accept/cancel to the same authoritative remote Readline editor.
 The destination fixture has neither Python nor Atuin and receives only the
 temporary in-memory Bash integration, with no installed project files.
 
-The native PowerShell `./scripts/hub.ps1 test` completed successfully: 109 cases
-in 174.546 seconds, with one intentionally skipped dedicated import case. That
-case passed in the runner's separate non-root SSH import phase (1 case,
-3.065 seconds). All 108 main-suite cases that ran passed. The lifecycle ran 14
-offline strace privacy cases with zero attempted AF_INET/AF_INET6 connect/send
-operations. This includes strict historical outcome filtering, identity
-safeguards, nine foreground/terminal cases and six real SSH compatibility cases.
+The compatibility/import correction is committed as `dfcb8c2`. With the added
+inline editor, the final installed modern-image suite passed 150 cases in
+173.164 seconds with 9 skips (8 optional legacy probes and the dedicated import
+case). The actual GNU Bash 4.4.23 fixture passed 150 cases in 186.773 seconds
+with only the dedicated import skip. The independent non-root SSH import case
+passed in 2.665 seconds against the corrected import code. Tests use disposable
+history only. Native offline strace observation passed 17 cases; the additional
+ble.sh startup/suggestion/refused-update observation passed 3 cases. Neither
+observed any attempted AF_INET/AF_INET6 connect/send operations.
+
+The hub now bundles pinned ble.sh for inline ghost text from native Atuin
+history, with real SSH Right Arrow/Enter/Ctrl-R coverage. See COMPATIBILITY for
+the release, full commit and archive digest. The editor is hub-only; temporary
+destination integration still uses its existing Bash/Readline. Its update hook
+refuses downloads. `ATUIN_SSH_HUB_AUTOSUGGEST=0` must be set before hub startup
+to disable it. Native HOST scope is unchanged.
+
+The installed inline-suggestion runtime image is
+`sha256:9ddf5ac93a4b40a7e16bf531f880fe636dac7bf9e37ee3a7b4b6a9515ed7674d`.
+Its final modern test image is
+`sha256:7cfa6f68b552d5b4c3d7ec3642f6b50fa775d54e99c2cdc307629524507c0bb2`;
+the corresponding legacy test image is
+`sha256:1a301d963fd9638f84087106d88963d9b1e48f2c14428dd48c4a594f2f3ba2bc`.
+Completed review/autocomplete/legacy fixture containers and networks were
+removed; their named volumes were preserved. Production was inspected afterward
+and remained running its original `sha256:55d6ebd29244accb675611d3ea26aea09d3596f8971236298b4a9cde05f305a8` image.
+
+The user's running production container was deliberately left on its old image
+while independent projects tested candidate tags. Do not silently recreate it
+or resume the real canceled import. `docker compose up -d --build` applies the
+update and disconnects active SSH sessions. After reconnecting, the user can run
+`atuin-ssh history resume-imports` to continue saved work without another fetch.
 
 Docker Desktop is healthy after the user freed space and restarted it. The
 earlier B: full condition is resolved. No unrelated images, caches, files or
@@ -53,6 +78,19 @@ production volumes were deleted by this project. Avoid global prune or
 - Non-root import CLI: configured HISTFILE, dry-run, repeats, append, overlap/
   rotation, timestamped multiline/Unicode, unknown fields and read-only failure
   followed by explicit resume. Stock native records verify afterward.
+- Native import setup is shared across bounded batches, retaining privacy before
+  durable ledger payload and stable IDs. Count-only progress, concise exit 130,
+  whole-coordinator serialization and uncertain-write reconciliation are tested.
+  A fault fixture commits three records before losing a 64-entry batch reply;
+  explicit resume plus six pending entries produces exactly 70 original native
+  IDs/records. Literal target aliases and accepted snapshots still define import
+  alignment; alias/bounds/privacy changes or ambiguous untimestamped rotations
+  are not an exactly-once guarantee.
+- Explicit `atuin-ssh connect --bash -- target` uses existing Bash 4.4+ even for
+  `/bin/sh` accounts; Bash 4.4 needs existing fractional `date` support. Automatic
+  enhancement still requires the configured Bash 5+ shell. The actual patched
+  GNU 4.4.23 fixture has no Python or Atuin. Scalar prompt hooks, private keymap
+  sequences, first-prompt native UI/capture and normal history defaults pass.
 - Every byte value and unrelated OSC/DCS match plain OpenSSH. Backpressure
   preserves 40,000 ordered background lines (>3 MiB) during TUI. Ctrl-Z/fg,
   Ctrl-C/cat EOF, external editor, less/nano/top, password/confirmation input
@@ -66,11 +104,19 @@ production volumes were deleted by this project. Avoid global prune or
 - Windows OpenSSH 9.5p2 → published 127.0.0.1:22220 → hub → destination printed
   `WINDOWS_NATIVE_TWO_HOP_FINAL_OK` with strict trusted keys. Docker Desktop
   4.58, Engine 29.1.5 and Compose 5.0.1 supplied Linux containers.
-  Interactive Windows Terminal remains a manual gate.
+  This is evidence from an earlier image. Repeating it for the inline-suggestion
+  image was not run because automatic approval review rejected copying the
+  disposable fixture's private key onto Windows; no extraction retry was made.
+  Current-image native Windows and interactive Windows Terminal remain gates.
 
 ## Performance
 
 See `docs/BENCHMARKS.md` and metadata-only JSON in `artifacts/`.
+
+A 200-entry native import fixture measured 7.9936 seconds with individual helper
+processes and 0.4599 seconds with bounded batches, verifying rows and encrypted
+records. This excludes SSH/ledger alignment and does not remove the individual
+record reconciliation cost of uncertain prior writes.
 
 The final two-hop widget baseline uses 20 samples/994 native rows:
 Ctrl-R → native header p50/p95/p99 = 21.98/27.21/29.49 ms; Tab → independent

@@ -93,7 +93,13 @@ class TwoHopNativeWidget(unittest.TestCase):
                   if os.environ.get("ATUIN_SSH_TEST_FORCE_BASH") == "1" else ["ssh"])
         args = [*prefix, *(options or []), user+'@'+destination]
         self.client.send(shlex.join(args)+"\n")
-        self.client.drain(.5)
+        # The hub editor may still be processing a long ProxyCommand paste.
+        # Wait for the fixture's real destination prompt before sending any
+        # probe, so queued test input cannot remain in the parent hub editor.
+        host = os.environ.get("ATUIN_SSH_TEST_DEST_HOSTNAME", "destination")
+        initial_prompt = re.compile(re.escape((user + "@" + host).encode())
+                                    + rb"(?:\x1b\[[0-9;]*m)*:[^\r\n]*\$ ")
+        self.client.expect(initial_prompt, timeout=30)
         self.client.send("printf '\\n__E2E_DEST_ORIGIN__%s:%s__\\n' \"$(hostname)\" \"$(id -un)\"\n")
         origin = self.client.expect(re.compile(rb"\r\n__E2E_DEST_ORIGIN__([^:\r]+):([^\r]+)__\r\n"), timeout=30)
         self.assertEqual((origin[1].decode(), origin[2].decode()),
@@ -369,7 +375,7 @@ class TwoHopNativeWidget(unittest.TestCase):
                 self.client.expect(NATIVE_UI, timeout=15)
                 self.client.expect(token.encode(), timeout=15)
                 self.client.send(b"\t")
-                self.client.expect(PROMPT, timeout=15)
+                self.client.expect(GEN_PROMPT, timeout=15)
                 self.assertEqual(self.snapshot()[0], command)
                 self.client.send(b"\x01\x0b")
 

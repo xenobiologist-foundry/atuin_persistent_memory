@@ -103,6 +103,7 @@ and execution. The bridge must never `eval` a returned command.
 | Surface | Required proof | Current boundary |
 | --- | --- | --- |
 | Native insert/accept/cancel | Real TUI and remote Readline snapshot | Automated test implemented; results in STATUS |
+| Hub inline suggestions | Real SSH typing, acceptance and native capture | Pinned ble.sh uses Atuin's native prefix-history source; Right Arrow inserts without execution, Enter executes the complete line, and Ctrl-R still opens native Atuin. Destination editors do not load ble.sh |
 | Context overrides | Native search/list output with two hosts/accounts | Actual native context and real two-hop ACCOUNT recall tested; same-hostname distinct-machine mapping remains a gap |
 | Exact account/directory/workspace scopes | Cross-account results and global switching | Distinct pinned native extension tested against account/host/global/directory/workspace data; no schema changes |
 | Native records/privacy/replay | Record-store checks and crash-window faults | Pinned native helper uses upstream APIs with compatibility checks/stable IDs; strict failed-command privacy, replay and native record cases pass the recorded aggregate |
@@ -177,6 +178,49 @@ currently depends on the literal SSH target, host/account/HISTFILE and aligned
 accepted snapshot; alias changes, changed filters/time bounds and ambiguous
 untimestamped rotations remain limitations rather than an exactly-once promise.
 
+## Hub inline suggestions
+
+The image bundles the official ble.sh release `ble-nightly-20260908+d81fd54`,
+commit `d81fd54feb0d996fdff20dca27eaf0201f7015cc`, with archive SHA256
+`7a2445f138e7f099dd5dee749391a8b045646d1b8a605975885be5b34b6b5f7e`.
+The full prebuilt bundle and license are installed under `/usr/local/share/blesh`.
+The archive is fetched and verified during image construction. Its package
+update hook refuses interactive downloads and directs users to rebuild the image.
+
+Hub startup follows [Atuin's documented Bash integration order](https://github.com/atuinsh/atuin/blob/main/docs/docs/integrations.md),
+verified against the installed 18.24.1 integration:
+load ble.sh without attaching, initialize native Atuin, install the onward SSH
+wrapper, then attach ble.sh. Atuin registers its own `atuin-history` suggestion
+source, which performs local prefix searches. Existing native scope and privacy
+settings apply; no separate suggestion database or remote service is introduced.
+Set `ATUIN_SSH_HUB_AUTOSUGGEST=0` before the hub startup source line to opt out.
+
+Two actual SSH tests verify visible ghost text, Right Arrow insertion without
+execution, Enter execution of the entire suggestion, and native Ctrl-R/cancel
+without accidental execution. Three Linux-PTY offline strace cases cover editor
+startup, a real history suggestion, and refused `ble-update`; all observed zero
+AF_INET/AF_INET6 connect/send attempts. The native helper's separate 17-case
+offline observation also passes with the bundled editor image. Normal intentional
+SSH/curl/Git networking remains available.
+
+The additional editor exposed test-harness timing assumptions: a large pasted
+ProxyCommand must finish reaching the actual destination prompt before sending
+an origin probe. Tests now wait for that known fixture prompt. After native Tab
+selection they wait for a generated prompt, avoiding a false match on a command
+shown among Atuin results. Focused real two-hop 50/150/300 ms RTT scenarios pass
+with both Bash 5.2 and Bash 4.4 destinations.
+
+The final installed-image aggregate passed 150 cases in 173.164 seconds on the
+modern fixture (9 optional/dedicated skips) and 150 cases in 186.773 seconds on
+the actual Bash 4.4.23 fixture (only the dedicated import skip). The separate
+non-root SSH import CLI case passed in 2.665 seconds against the corrected import
+code. The fixture database checks use read-only SQL as the hub's database owner,
+so SQLite can maintain its live WAL auxiliary files; an immutable read-only view
+would incorrectly hide committed WAL data. Completed fixture containers/networks
+were removed with their named volumes preserved.
+
+## Earlier foundation evidence
+
 The first foundation image used Python 3.14.2 on Debian 12, Bash 5.2.15,
 OpenSSH 9.2p1 Debian-2+deb12u10 and OpenSSL 3.0.22. Its GNU Atuin binary refused to
 run because GLIBC_2.38 and GLIBC_2.39 were unavailable. This was a real failed
@@ -187,12 +231,13 @@ Bash macro-chain implementation were inspected in that image.
 Docker storage exhaustion temporarily interrupted development. After recovery,
 installed-image tests exercised ABORT/RELEASE recovery, native record/scoping
 extensions and a READY descriptor after the first complete native UI frame.
-The latter fixed loss of Enter/navigation keys sent with activation. Latest
-status/history-expansion/privacy corrections passed the recorded installed-image
+The latter fixed loss of Enter/navigation keys sent with activation. Earlier
+status/history-expansion/privacy corrections passed an earlier installed-image
 aggregate: 109 cases in 174.546 s, OK with one dedicated-import skip; that case
 passed separately in 3.065 s. All 28 two-hop, 9 terminal and 6 actual SSH
-compatibility cases passed. The final 14-case offline privacy probe observed
-zero attempted Internet requests.
+compatibility cases passed. That image's 14-case offline privacy probe observed
+zero attempted Internet requests. See STATUS for the newer compatibility/import
+and inline-suggestion regression results.
 
 Actual Bash 5.2 rejects `bind -m vi-insertion` as an invalid keymap. Native Atuin
 uses `vi-insert`. The expanded PTY suite caught this independently: vi-command

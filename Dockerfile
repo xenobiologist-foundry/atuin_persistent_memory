@@ -76,6 +76,25 @@ RUN python -m pip install --no-cache-dir --require-hashes -r requirements-build.
 COPY src ./src
 RUN python -m pip wheel --no-build-isolation --no-deps --wheel-dir /wheels .
 
+# Official, dated prebuilt bundle. The digest fixes the bytes even if the
+# upstream nightly release changes; no runtime update/download is enabled.
+FROM foundation AS blesh-bundle
+ARG BLESH_RELEASE=ble-nightly-20260908+d81fd54
+ARG BLESH_SHA256=7a2445f138e7f099dd5dee749391a8b045646d1b8a605975885be5b34b6b5f7e
+RUN curl --fail --location --retry 3 \
+      "https://github.com/akinomyoga/ble.sh/releases/download/nightly/${BLESH_RELEASE}.tar.xz" \
+      --output /tmp/blesh.tar.xz \
+    && printf '%s  %s\n' "${BLESH_SHA256}" /tmp/blesh.tar.xz | sha256sum --check --strict \
+    && mkdir -p /usr/local/share/blesh \
+    && tar -xJf /tmp/blesh.tar.xz -C /usr/local/share/blesh --strip-components=1 \
+    && test -s /usr/local/share/blesh/ble.sh \
+    && test -s /usr/local/share/blesh/licenses/LICENSE.md \
+    && printf '%s\n' \
+      "release=${BLESH_RELEASE}" \
+      'commit=d81fd54feb0d996fdff20dca27eaf0201f7015cc' \
+      "sha256=${BLESH_SHA256}" > /usr/local/share/blesh/SOURCE \
+    && rm /tmp/blesh.tar.xz
+
 FROM foundation AS runtime
 ARG HUB_USER=hubuser
 ARG HUB_UID=1000
@@ -83,6 +102,8 @@ ARG HUB_GID=1000
 COPY --from=native-search-build /out/atuin-ssh-native /usr/local/bin/atuin-ssh-native
 COPY --from=native-search-build /out/atuin-ssh-search /usr/local/bin/atuin-ssh-search
 COPY --from=native-source /opt/atuin/LICENSE /usr/share/licenses/atuin/LICENSE
+COPY --from=blesh-bundle /usr/local/share/blesh /usr/local/share/blesh
+COPY docker/blesh-package.bash /usr/local/share/blesh/lib/_package.bash
 RUN groupadd --gid "${HUB_GID}" "${HUB_USER}" \
     && useradd --uid "${HUB_UID}" --gid "${HUB_GID}" --create-home --shell /bin/bash "${HUB_USER}" \
     && usermod --password '*' "${HUB_USER}" \
@@ -146,6 +167,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends strace \
     && rm -rf /var/lib/apt/lists/*
 COPY tests /opt/atuin-ssh/tests
 COPY docker/privacy-probe.py /opt/atuin-ssh/privacy-probe.py
+COPY docker/blesh-privacy-probe.py /opt/atuin-ssh/blesh-privacy-probe.py
 COPY docker/test-keys.sh /usr/local/sbin/test-keys
 RUN chmod 0755 /usr/local/sbin/test-keys
 WORKDIR /opt/atuin-ssh

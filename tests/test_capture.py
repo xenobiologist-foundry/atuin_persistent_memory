@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import os
+import json
 import re
-from contextlib import closing
-from pathlib import Path
-import sqlite3
+import shlex
+import subprocess
 import unittest
 import uuid
 
@@ -30,10 +30,26 @@ class CommandLifecycle(unittest.TestCase):
         self.shell.client.send(b"\x1b")
         self.shell.client.expect(flow.PROMPT)
 
+    def query(self, statement, parameters, path="/state/atuin/data/history.db"):
+        # Read as the live database owner: SQLite's WAL auxiliary files may
+        # need creating after a checkpoint, which the read-only client mount
+        # cannot do. mode=ro still prevents changes to the history database.
+        probe = """from contextlib import closing
+import json,sqlite3,sys
+with closing(sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)) as db:
+    rows=db.execute(sys.argv[2],json.loads(sys.argv[3])).fetchall()
+print(json.dumps(rows))
+"""
+        arguments = ["python", "-c", probe, path, statement,
+                     json.dumps(parameters, ensure_ascii=False)]
+        result = subprocess.run(["/usr/bin/ssh", "-F", str(self.shell.config), self.shell.target,
+                                 shlex.join(arguments)], capture_output=True, text=True,
+                                timeout=15, check=True)
+        return [tuple(row) for row in json.loads(result.stdout)]
+
     def rows(self):
-        path = Path("/test-state/atuin/data/history.db")
-        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as db:
-            return db.execute("SELECT command,exit,duration,cwd,session FROM history WHERE command LIKE ? AND deleted_at IS NULL ORDER BY timestamp", ("%"+self.token+"%",)).fetchall()
+        return self.query("SELECT command,exit,duration,cwd,session FROM history WHERE command LIKE ? AND deleted_at IS NULL ORDER BY timestamp",
+                          ("%"+self.token+"%",))
 
     def assert_occurrence(self, command, status):
         self.barrier()
@@ -90,8 +106,8 @@ class CommandLifecycle(unittest.TestCase):
         self.shell.command(command)
         self.assert_occurrence(command, 0)
         session = self.rows()[0][4]
-        with closing(sqlite3.connect("file:/test-state/bridge/connections.sqlite3?mode=ro", uri=True)) as db:
-            target, origin, account = db.execute("SELECT target,host,account FROM sessions WHERE session=?", (session,)).fetchone()
+        target, origin, account = self.query("SELECT target,host,account FROM sessions WHERE session=?",
+                                            (session,), "/state/bridge/connections.sqlite3")[0]
         self.assertEqual((target, origin, account), ("remote@destination", "destination", "remote"))
 
     def test_blank_lines_and_snapshot_binding_do_not_duplicate_previous_entry(self):
@@ -118,9 +134,8 @@ class CommandLifecycle(unittest.TestCase):
         self.shell.client.expect(flow.PROMPT)
         self.assertNotRegex(bytes(self.shell.client.transcript), flow.NATIVE_UI)
         self.barrier()
-        path = Path("/test-state/atuin/data/history.db")
-        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM history WHERE command LIKE ?", ("%"+typed+"%",)).fetchone()[0], 0)
+        self.assertEqual(self.query("SELECT count(*) FROM history WHERE command LIKE ?",
+                                    ("%"+typed+"%",))[0][0], 0)
 
     def test_histignore_and_leading_space_are_respected_without_changing_policy(self):
         self.shell.command("HISTIGNORE='*HIDDEN_CAPTURE*'; HISTCONTROL=ignoreboth")

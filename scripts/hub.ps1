@@ -58,6 +58,7 @@ switch ($Action) {
         Invoke-Docker compose --project-name atuin-ssh-test --file compose.test.yaml up --build --detach hub destination
         Invoke-Docker compose --project-name atuin-ssh-test --file compose.test.yaml run --rm client
         Invoke-Docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/privacy-probe.py
+        Invoke-Docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/blesh-privacy-probe.py
         Invoke-ImportVerification
     }
     'test-import' { Invoke-ImportVerification }

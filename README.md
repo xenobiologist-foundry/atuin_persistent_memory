@@ -106,6 +106,19 @@ restart. Do not import login credentials or attach cloned native writer state to
 two running independent hubs. Daemon search is currently disabled and requires
 separate compatibility verification.
 
+The hub's Bash also shows inline suggestions from its native Atuin history,
+using ble.sh and Atuin's own history source. Type a command prefix, then press
+**Right Arrow** to insert the suggested suffix; **Enter** executes the completed
+line. Up and Ctrl-R still open native Atuin. Suggestions use the current native
+search scope, so the default HOST scope at the hub can hide destination history.
+This editor is loaded only in the hub; onward destinations keep their temporary
+Bash/Readline integration.
+
+To disable inline suggestions, put `export ATUIN_SSH_HUB_AUTOSUGGEST=0` in the
+hub user's `~/.bashrc` **before** its `/etc/atuin-ssh/hub.bash` source line, then
+reconnect. The bundled ble.sh version is pinned and updated through image builds;
+`ble-update` does not download or install anything.
+
 ## Troubleshooting an onward session
 
 A normal destination prompt after `ssh myserver` is expected. Press **Up** or
@@ -202,6 +215,12 @@ another SSH connection or password prompt. An interrupted native write is checke
 by its original stable ID before retrying. Recovery also honors native deletions.
 An earlier version could import silently for a long time and show non-TTY Bash
 job-control warnings; rebuild the image to get progress and the faster batch path.
+
+To apply a source update from the repository, run `docker compose up -d --build`.
+Recreating the hub disconnects active SSH sessions. Reconnect afterward and run
+`atuin-ssh history resume-imports` to continue an interrupted import from its
+saved ledger; it does not fetch the destination history again.
+
 With `store_failed=false`, unknown historical outcomes are pending without a
 locally retained command payload. Importing them requires an explicit policy
 change and another fetch; no historical success status is invented. Live

@@ -1,1 +1,23 @@
-{"cases":14,"internet_connection_or_send_attempts":0,"network_namespace":"none","state":"isolated and removed","observed":"stock startup/capture/search, native helper filter/start/write/import/check, extended native noninteractive and TUI search"}
+{
+  "recorded_local_date": "2026-10-24",
+  "runtime_image_id": "sha256:9ddf5ac93a4b40a7e16bf531f880fe636dac7bf9e37ee3a7b4b6a9515ed7674d",
+  "test_image_id": "sha256:7cfa6f68b552d5b4c3d7ec3642f6b50fa775d54e99c2cdc307629524507c0bb2",
+  "cases": 20,
+  "internet_connection_or_send_attempts": 0,
+  "network_namespace": "none",
+  "state": "isolated disposable profiles; no production state",
+  "native": {
+    "cases": 17,
+    "container_wall_seconds": 3.0767,
+    "internet_connection_or_send_attempts": 0,
+    "observed": "stock startup/capture/search, native helper filter/start/write/import/check and bounded batches, extended native noninteractive and TUI search"
+  },
+  "hub_editor": {
+    "cases": 3,
+    "container_wall_seconds": 9.0241,
+    "internet_connection_or_send_attempts": 0,
+    "observed": "ble.sh startup, typed native-history ghost suggestion, refused ble-update",
+    "updater_exit": 1
+  },
+  "limitation": "bounded runtime observations; intentional user networking remains enabled"
+}

@@ -25,6 +25,7 @@ case "$action" in
             docker compose --project-name atuin-ssh-test --file compose.test.yaml up --build --detach hub destination
             docker compose --project-name atuin-ssh-test --file compose.test.yaml run --rm client
             docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/privacy-probe.py
+            docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/blesh-privacy-probe.py
         fi
         import_compose=(docker compose --project-name atuin-ssh-import-check --file compose.test.yaml)
         cleanup_import() { TEST_HUB_PORT=22224 "${import_compose[@]}" down; }
