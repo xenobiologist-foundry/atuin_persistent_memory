@@ -1,38 +1,41 @@
 # Delivery status
 
-Updated 2026-10-23. This checklist records evidence, not intended capabilities.
-The requested MVP remains incomplete until its defining native-key two-hop gate
-and all remaining scope/capture/storage/deployment gates pass.
+Updated 2026-10-24. This checklist records evidence, not intended capabilities.
+The defining native-key two-hop interaction works in the installed container.
+The brief's complete MVP remains incomplete while the parity and deployment
+gates below remain open.
 
 | Delivery item | State | Evidence or next concrete action |
 | --- | --- | --- |
 | Authoritative brief and repository inspection | Complete | Empty repository plus brief inspected; implementation started in place |
-| Linux Python execution from PowerShell | Passed | Disposable `python:3.14.0-slim-trixie` ran SSH argv tests: 3 passed; real OpenSSH test skipped because that base lacks ssh |
-| Initial foundation image | Corrected; previously running | GNU binary ABI failure corrected using checksum-pinned static musl Atuin 18.24.1; ordinary hub and destination sshd were healthy before Docker storage failure |
+| Linux Python execution from PowerShell | Passed | Final installed-image suite ran Python 3.14.2/Bash/OpenSSH in Linux containers from native PowerShell; no Windows Python or separately managed WSL distribution required |
+| Foundation image | Passed installed image gate | Checksum-pinned static musl Atuin 18.24.1, Python 3.14.2, Bash 5.2.15 and OpenSSH 9.2p1 on Debian 12; installed package works without checkout; image/content size about 126 MB and Docker disk usage about 501 MB |
 | SSH invocation classification | Passed component gate | Original argv preserved; special forms bypass; actual OpenSSH `-G` custom config tests pass |
-| Framed protocol | Passed component gate on earlier source | Six actual Python 3.14 Linux tests cover fragmentation, unrelated escape sequences, malformed/stale/truncated/oversized data and selected command encoding; later recovery changes need rerun |
-| Real native Atuin two-hop interaction | Initial vertical slice passed on earlier source | Eight PTY acceptance tests passed together in 9.835 s against installed hub package; native CLI seeds separate this gate from capture; later ABORT/RELEASE ownership recovery changes have not been built or retested |
-| Input/cursor/mark, insert, accept, cancel, Up, type-ahead | Passed initial local Docker cases | Native Atuin 18.24.1, independent remote Readline snapshots, Unicode cursor/mark cancellation, Tab insertion, Enter execution, Up-specific SESSION scope, immediate activation+query, foreground raw read and resize |
-| Expanded editing/keymap/nested cases | 14/15 earlier-image cases passed; source fix unverified | Unicode partial query, multiline/trailing LF selection, vi-command slash cancellation, custom binding, paste/undo/completion and nested Bash pass; Bash 5.2 rejects `vi-insertion`; source changed to `vi-insert` but image rerun is blocked |
-| Delayed destination type-ahead | Implemented; blocked from execution | Unprivileged bounded hub-side ProxyCommand adds 150/300 ms destination RTT; Docker engine write failure prevented completed run |
-| Remote account/directory/workspace search scopes | Extension implemented; runtime unverified, blocks MVP | Stock host scope spans users, directory is path-only, workspace discovery is hub-local; isolated pinned native extension adds exact scopes, final build/run was interrupted |
-| Command capture and durable native records | Implemented; end-to-end unverified, blocks MVP | Native adapter first compile passed; component outbox tests passed separately; actual remote capture, native completion, exact replay and record integrity require final image run |
-| Concurrent workstation sharing | Test implemented; unverified | Two simultaneous workstation → hub → destination sessions must immediately share native ACCOUNT history; a common local store alone does not establish the visibility barrier |
-| Import/provenance/collisions | Implemented; native/end-to-end proof unverified, blocks MVP | Timestamped multiline parsing, occurrence ledger, bounded reader, dry-run, recovery and native collision preservation; eleven Python storage/import tests passed; final real-native probes require Docker recovery |
-| Runtime no-account/no-external-traffic observation | Unverified, blocks MVP | Configuration alone is insufficient; capture attempted network requests during actual operations |
-| Persistence and backup/restore | Passed earlier-image stopped-hub restore gate | PowerShell backup stopped/resumed fixture and wrote `artifacts/backup-check/hub.tar.gz`; fresh `atuin-ssh-test-restore-{state,home}` volumes restored all 24 regular files with exact bytes, uid/gid and modes; non-root native search read restored state; final native-extension image needs rerun |
-| Windows OpenSSH | Noninteractive published-port hop passed; interactive manual gate | Native Windows OpenSSH 9.5p2 → 127.0.0.1:22220 hub → destination printed `WINDOWS_NATIVE_TWO_HOP_OK` with strict trusted host keys; actual Windows Terminal interactive keys remain unverified |
+| Actual SSH compatibility | Six installed-image cases passed | Real aliases, configured RemoteCommand, explicit command and status, TCP forwarding, ProxyJump and shared ControlMaster ownership passed in 10.335 s; further authentication and escape coverage remains |
+| Framed protocol | Passed component gate | Fragmentation, unrelated escape sequences, malformed/stale/truncated/oversized data, response chunking, ABORT/RELEASE recovery and actual terminal-query handling exercised in the aggregate suite |
+| Real native Atuin two-hop interaction | Defining interaction demonstrated | Real workstation SSH → installed hub → Python-free destination Bash; native ACCOUNT UI, Tab insert, Enter accept, Escape cancellation, Unicode cursor/mark preservation, vi insert/command and native Up-specific scope |
+| Startup ownership/type-ahead | Passed focused real PTY gates | Native READY descriptor after negotiation/first query/first frame prevents early input loss; Ctrl-R + query + Enter and Ctrl-R + query + Up + Tab in one write pass, including selection of an older matching command |
+| Editing, output and jobs | Passed installed-image PTY gates | Exact >16 KiB Unicode/quotes/tabs/trailing-newline selection; plain-OpenSSH differential for every byte value and unrelated OSC/DCS; 40,000 ordered background lines (>3 MiB) survive bounded buffering; Ctrl-Z/fg/Ctrl-C/cat EOF, external editor, nested Bash, less/nano/top and password/confirmation input; active-UI resize preserves selection and reaches remote stty |
+| Delayed destination type-ahead | Passed 50/150/300 ms scenarios | Unprivileged bounded hub-side ProxyCommand adds half the stated RTT in each encrypted-stream direction; immediate Ctrl-R/query reaches the widget and selection returns to the same remote editor; no workstation/hub delay injected |
+| Remote account/directory/workspace search scopes | Native extension exercised | Distinct pinned `atuin-ssh-search` retains upstream TUI, adds exact ACCOUNT and qualified directory/workspace scopes; actual native tests distinguish host/account/global/path/workspace; no schema changes |
+| Command capture and native records | Passed installed-image aggregate gate | Fifteen real two-hop lifecycle cases cover pipelines/functions/loops/substitution, shell status, repeated commands, cancellation, background launch, cwd, aliases/provenance, interactive read, HISTIGNORE/leading space, heredoc, history expansion and unknown exit/exec completion |
+| Concurrent workstation sharing | Passed actual two-session gate | Two simultaneous workstation → hub → destination sessions immediately share ACCOUNT history through the hub's native store after prompt visibility/barrier fixes |
+| Import/provenance/collisions | Native/component probes passed; remaining parity listed below | Bounded Bash reader, timestamped multiline parsing, occurrence ledger, dry-run, native record verification, retries/collision preservation; broader rotation/time-bound/ambiguity coverage remains incomplete |
+| Runtime no-account/no-external-traffic observation | Passed final 14-case offline observation | `strace` under `--network none` detected zero attempted Internet requests across stock/native startup, capture, search, import, check and real TUI |
+| Persistence and backup/restore | Passed installed-image operations gate | Forced recreation preserved native record/local key/sshd key/home fingerprints; PowerShell stopped-hub backup and fresh-volume restore compared 22 regular files byte-for-byte with uid/gid/modes; non-root native search and store verification passed; source stopped before activating restored writer |
+| Windows OpenSSH | Noninteractive published-port hop passed; interactive manual gate | Native Windows OpenSSH 9.5p2/LibreSSL 3.8.2 → published localhost hub → destination printed `WINDOWS_NATIVE_TWO_HOP_FINAL_OK` with strict trusted host keys; actual Windows Terminal interactive keys remain unverified |
 | Native Linux Docker Engine smoke | Manual gate | Same image/Compose, SSH, persistence, networking and restore |
 | Second LAN workstation / firewall boundary | Manual gate | Authorized second-machine connection and outside-boundary rejection |
-| Initial small-history latency | Measured on earlier image | 20 samples, 112 records, i7-14700K, amd64: key→native header p50/p95/p99 = 14.32/16.04/18.63 ms; Tab→Readline snapshot = 5.93/8.85/12.05 ms; includes both transports/test client, no isolated relay overhead |
-| RTT and 10k/100k/1m performance | Unverified | Small-history baseline does not establish scaling, query/navigation or added relay latency targets |
-| Docker Desktop test engine | Blocked: host B: storage full | New client container creation failed writing containerd snapshotter metadata.db with input/output error; host B: had about 20 KiB free and engine stopped; no production resources deleted |
+| Small-history two-hop latency | Measured installed protocol-2 image | 20 samples, 994 records, i7-14700K, amd64: key→native header p50/p95/p99 = 21.98/27.21/29.49 ms; Tab→Readline snapshot = 6.64/8.25/9.20 ms; includes both transports/test client |
+| Native 10k/100k/1m performance | Measured independently of SSH/relay | 20 samples/action/size; exact first-results READY and verified query/navigation selections; native first-results p95 about 10–14 ms; single-query-key plus Tab/exit p95 7.38/23.09/213.49 ms; warm OS cache; see COMPATIBILITY and raw report |
+| Relay overhead comparison | Measured real two-hop differential | 1,000 exact 32-byte raw-cat echoes per path, after 20 warmups: plain/enhanced round-trip p95 0.689/0.889 ms; difference about 0.20 ms supports local 5 ms target, but does not isolate one-way relay latency |
+| Remaining performance gates | Unverified | Full two-hop scaling, true cold-disk behavior and separate workstation/hub latency; native 1M query cost is a measured scaling limit |
+| Docker Desktop test engine | Recovered | Host B: exhaustion interrupted an earlier build; space was freed and Docker restarted, followed by successful installed-image builds/tests; no production resources were deleted by this project |
+| Latest aggregate suite | Passed final installed image | PowerShell `./scripts/hub.ps1 test`: 109 cases in 174.546 s, OK with 1 dedicated-import skip; that import case passed separately in 3.065 s; offline privacy probe passed all 14 cases with zero attempted Internet requests. Includes 28 two-hop, 9 terminal, 6 actual SSH compatibility and 30 storage cases (dedicated import skipped in the aggregate); owned phase containers/network cleaned |
 
-Next action: restore Docker engine health, rebuild the corrected vi-insert/native
-adapter image, then prove real capture/exact scopes and 150/300 ms type-ahead.
-The latest ABORT/RELEASE recovery protocol and native replay/locking changes also
-require a full rebuild and acceptance rerun; earlier evidence does not establish
-that final source's behavior.
+Next action: implement explicit machine mapping, broaden startup/hook and storage
+compatibility, and complete the physical-platform/LAN/manual parity gates before
+claiming full MVP.
 
 ## Remaining parity gates
 
@@ -41,20 +44,21 @@ not established failures unless explicitly identified as a known gap.
 
 | Area | Remaining evidence or known gap |
 | --- | --- |
-| Final native key contract | Rerun complete original suite after ABORT/RELEASE, vi fix, long-query memfd and cleanup changes; Enter/Tab/Escape bursts, custom disabled initial bindings and resize during UI |
-| Startup/hook parity | Differential profiles exactly once, startup output, string/array PROMPT_COMMAND, existing DEBUG/EXIT/preexec, shell options and existing Atuin; noninteractive rcfile side effects and replaced PROMPT_COMMAND are known bootstrap gaps; incompatible DEBUG/functrace currently degrades capture |
-| Shell editing and applications | Full multiline/heredoc/history expansion, external editor, long command bounds; Vim/nano/less/top/REPL/password/confirmation; Ctrl-C/Z/D, fg and OpenSSH local suspension/escapes |
-| Native SSH compatibility | Real aliases, combined flags, explicit commands, configured RemoteCommand, jump/proxy, forwarding/multiplexing, key/password/keyboard-interactive/agent/cert authentication; component parsing alone is insufficient |
-| Output and recovery | Byte differential versus plain SSH; sustained background output/backpressure, terminal queries, malformed/interleaved frames, stale generations, TUI/worker/relay failures and either transport disconnect |
-| Capture lifecycle | Exactly one accepted compound execution, functions/loops/pipelines/subshells/substitutions, nonzero statuses, background launch, exit/exec/incomplete/disconnect, history policy and canceled input; actual native visibility and record integrity |
-| Context and native scopes | Two hosts/accounts, same paths and aliases, session isolation, remote Git roots, GLOBAL removal of ACCOUNT restrictions; machines with identical hostname still need an identity mapping solution and must not be silently merged |
-| Storage and privacy | Actual stable-ID crash-window replay, deletion/tombstones, concurrent writers/deleters, native uniqueness collisions, DB busy/read-only/full/corruption, daemon capability; privacy filters and durable outbox exclusions before payload storage; final aggregate diagnostics need rerun |
-| Imports | Native timestamp/unknown-field preservation, repeat/append/rotation/truncation/overlap, ambiguous multiline reports, time bounds, dry-run prospective conflicts, interrupted resumability, ordinary local Atuin interoperability and native record integrity |
-| Central sharing | Concurrent authorized workstation immediate visibility and restart; peer volatile-ingress visibility window needs testing; independent hubs remain separate, no copied concurrent writer identities |
-| Deployment and privacy | Final installed image without checkout, fresh private-state audit, no-install destination inventory, final-image recreate/backup/restore; strace attempted-egress probe and offline operation; deliberate DNS/HTTPS/onward SSH still functional |
-| Actual host/LAN/platform tests | Interactive Windows Terminal keys, native Linux Engine image/network/persistence/restore, second authorized LAN workstation and boundary rejection, LAN IP/DNS and VPN diagnostics; arm64 is not supported by evidence |
-| Performance | Cold/warm first results, query/navigation response, local relay differential, separate workstation/hub and hub/destination RTT, 50/150/300 ms scenarios, 10k/100k/1m records and multiple sessions |
+| Final native key contract | Explicit insert-result tagging, activation bursts, literal action-prefix commands, active-UI resize and strict privacy cases pass the final aggregate; full custom keymap coverage remains |
+| Startup/hook parity | Five isolated real Bash startup probes pass: profiles once, aliases/functions/options, scalar/array prompt append, custom binding, existing DEBUG preservation; replaced PROMPT_COMMAND falls back plain; incompatible DEBUG/functrace disables enhancement and capture. EXIT/preexec/existing-Atuin combinations need broader evidence |
+| Shell editing and applications | Existing tests cover multiline selection, >16 KiB bounds, external editor, cat/read, Ctrl-C/Z/D, fg, heredocs, history expansion, less/nano/top and password/confirmation; Vim, further REPLs and OpenSSH suspension/escapes need additional evidence |
+| Native SSH compatibility | Six real cases pass aliases, configured RemoteCommand, explicit command/status, TCP forwarding, ProxyJump and shared ControlMaster ownership. Combined flags and further proxy/forwarding combinations, password/keyboard-interactive/agent/cert authentication and escape behavior remain |
+| Output and recovery | Byte differential, >3 MiB backpressure and terminal queries pass; continue broader malformed/interleaved-frame, stale-generation, worker/relay failure and both-transport disconnect faults |
+| Capture lifecycle | Fifteen lifecycle cases pass the recorded aggregate, including status, expanded history and unknown exit/exec completion; broader interrupt/disconnect and history-policy combinations remain. Complex HISTIGNORE patterns conservatively fall back for duplicate capture; they must not bypass privacy |
+| Context and native scopes | Exact native scopes pass fixture probes. Conflicting registered endpoints for one reported origin cause pending live capture and refused ACCOUNT selection. Direct-native reproduction confirms the representation gap; imported/unregistered history and preexisting rows remain outside the guard and can overlap. A mapping solution is required |
+| Storage and privacy | Stable-ID crash-window replay, deletion/tombstones, native uniqueness collisions, concurrent writers and privacy-before-durable-payload cases pass; broader concurrent deletion, DB busy/read-only/full/corruption and daemon capability remain |
+| Imports | Native/ledger probes and actual SSH CLI custom-HISTFILE append/rotation/read-only recovery pass; broader truncation/overlap, ambiguity, time bounds, large imports and interrupted resumability remain |
+| Central sharing | Containerized concurrent-workstation immediate visibility passes; physical second-workstation/LAN firewall boundaries remain manual; independent hubs remain separate, with no cloned concurrent writer identities |
+| Deployment and privacy | Installed image, no-install destination inventory, recreation/restore and final offline attempted-egress tests pass; deliberate LAN DNS/HTTPS/VPN diagnostics remain |
+| Actual host/LAN/platform tests | Interactive Windows Terminal keys, native Linux Engine image/network/persistence/restore, second authorized LAN workstation and boundary rejection, LAN IP/DNS and VPN diagnostics |
+| Performance | Native 10k/100k/1m, small-history two-hop and real relay differential measured; 50/150/300 ms destination-delay correctness passes; true cold-cache, full two-hop scaling and independent workstation/hub delay remain unverified |
 
 Nested inner shells deliberately remain usable pass-through scopes, with no
 claimed inner capture/enhancement. This documented boundary follows the brief;
 its complete foreground-application behavior still needs the tests above.
+The implemented image targets linux/amd64. Arm64 is outside this delivery scope.

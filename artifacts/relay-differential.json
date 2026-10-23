@@ -1,0 +1,31 @@
+{
+  "kind": "real workstation SSH -> hub -> destination raw-cat echo",
+  "measured_at_utc": "2026-10-23T20:37:14Z",
+  "payload_bytes": 32,
+  "warmup_samples_per_path": 20,
+  "plain_system_ssh_roundtrip_ms": {
+    "samples": 1000,
+    "p50": 0.38686649997998757,
+    "p95": 0.6893770000715449,
+    "p99": 0.7458000000042375,
+    "minimum": 0.22872399995321757,
+    "maximum": 0.8950939998157992
+  },
+  "enhanced_relay_roundtrip_ms": {
+    "samples": 1000,
+    "p50": 0.44727150009293837,
+    "p95": 0.8893570000054751,
+    "p99": 0.9475120000388415,
+    "minimum": 0.31365299992103246,
+    "maximum": 1.0281929999109707
+  },
+  "p95_difference_ms": 0.19997999993393023,
+  "p50_difference_ms": 0.0604050001129508,
+  "method": "Same actual workstation/hub/destination OpenSSH paths and trusted keys; plain onward uses /usr/bin/ssh -tt with explicit raw-cat command; enhanced onward enters instrumented login Bash then execs cat. Monotonic wall clock around a unique 32-byte payload and its exact echo.",
+  "limits": [
+    "Difference is an approximate additional round-trip latency including PTY/relay and separate-session scheduling, not isolated one-way relay latency.",
+    "Plain path was sampled before enhanced path; host scheduling/cache/other test activity can affect differences.",
+    "No artificial transport RTT was added; this does not isolate workstation/hub versus hub/destination RTT.",
+    "Authentication/startup and 20 warm-up exchanges are excluded."
+  ]
+}

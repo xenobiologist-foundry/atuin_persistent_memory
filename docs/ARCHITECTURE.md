@@ -16,7 +16,9 @@ disable installation. Also, sshd's command-launching Bash can run `.bashrc`
 noninteractively before the login shell. A profile with noninteractive side
 effects therefore needs differential startup verification. Full startup
 equivalence for every custom profile is not established. Existing incompatible
-DEBUG traps/functrace are left intact and capture reports degradation. Changing
+DEBUG traps/functrace are left intact; capture and enhanced history keys degrade
+to ordinary Bash behavior because foreground Readline eligibility cannot then
+be proven. Changing
 hooks after initialization can disable capture. These are acceptance gates,
 not a claim of complete shell parity.
 
@@ -60,6 +62,31 @@ reconciles native records after uncertain commits. Native search has a bounded
 visibility barrier; delayed/pending writes are reported without killing SSH.
 The outbox and occurrence ledger are implementation metadata, not a second
 history search store.
+
+When native `store_failed=false` requires knowing the outcome first, accepted
+commands remain in a bounded volatile queue until a successful completion.
+Failed or unknown outcomes never enter a durable payload. This intentionally
+loses incomplete commands on disconnect or process loss under that policy.
+Imports with unknown historical outcomes are reported as pending without a
+local command payload; changing the policy requires explicitly fetching again.
+
+Connection provenance retains the SSH alias and a small allowlist of effective
+endpoint fields beside the reported real hostname/account and native session.
+It excludes full argv, ProxyCommand, credential paths and environments. This
+metadata does not provide a verified machine identity. If observed effective
+endpoints differ but report the same hostname/account, allowed captures are held
+as `pending_identity` and the remote widget refuses a misleading ACCOUNT scope.
+Aliases with the same effective endpoint share a group; HostKeyAlias remains
+trust metadata, without manufacturing another endpoint. Different proxy routes
+can conservatively require resolution even if they reach one machine. Older
+unregistered/native/imported records remain outside this conflict detector and
+can overlap in native scope. Full identity isolation remains an MVP gate; no
+synthetic hostname conceals it.
+
+Repeated commands suppressed by Bash's history number are captured from the
+authoritative accepted buffer without changing HISTCONTROL. Complex escaped,
+bracket or extended HISTIGNORE patterns conservatively disable this duplicate
+fallback and report degradation; basic globs and exact `&` are supported.
 
 Destination `EPOCHREALTIME` supplies microsecond wall timestamps. Duration uses
 the observed remote completion minus start, including command execution and

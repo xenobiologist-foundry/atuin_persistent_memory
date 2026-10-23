@@ -1,7 +1,7 @@
 {
   "kind": "disposable local Docker two-hop baseline",
-  "measured_at_utc": "2026-10-23T19:52:08Z",
-  "history_records": 112,
+  "measured_at_utc": "2026-10-23T20:46:14Z",
+  "history_records": 994,
   "python": "3.14.2",
   "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.36",
   "cpu": "Intel(R) Core(TM) i7-14700K",
@@ -9,19 +9,19 @@
   "architecture": "x86_64",
   "key_to_native_header_ms": {
     "samples": 20,
-    "p50": 14.3223314998977,
-    "p95": 16.03648099990096,
-    "p99": 18.629773000157,
-    "minimum": 13.206574999912846,
-    "maximum": 18.629773000157
+    "p50": 21.98381700009122,
+    "p95": 27.20982599976196,
+    "p99": 29.491304000202945,
+    "minimum": 19.82959099996151,
+    "maximum": 29.491304000202945
   },
   "tab_to_remote_readline_snapshot_ms": {
     "samples": 20,
-    "p50": 5.930754499786417,
-    "p95": 8.84618899999623,
-    "p99": 12.04947499991249,
-    "minimum": 5.5488250000053085,
-    "maximum": 12.04947499991249
+    "p50": 6.642860500051029,
+    "p95": 8.247684000252775,
+    "p99": 9.196896000048582,
+    "minimum": 6.017525000061141,
+    "maximum": 9.196896000048582
   },
   "method": "Actual workstation OpenSSH PTY through hub sshd, installed bridge, destination sshd; monotonic wall clock; native CLI seeded record; unique query already typed in remote Readline before Ctrl-R; Tab followed by shell redraw and independent Readline snapshot.",
   "limits": [
@@ -29,6 +29,6 @@
     "Includes workstation-to-hub transport, destination ownership roundtrip, native UI startup/rendering and test client terminal processing.",
     "Return includes result transport and a second remote Readline snapshot callback.",
     "No artificial RTT was configured. The two network RTTs and local relay-only overhead are not isolated by this measurement.",
-    "Query/navigation p95, direct-OpenSSH differential and cold/warm storage/cache isolation remain unmeasured."
+    "This run does not measure query/navigation p95, direct-OpenSSH differential or cold/warm cache isolation; separate reports cover native scaling and relay differential."
   ]
 }

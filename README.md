@@ -117,6 +117,11 @@ are identified in the provenance ledger. Repeat imports align occurrences,
 including repeated equal commands, rather than deduplicating command text.
 Unresolvable native uniqueness collisions remain pending. Review dry-run
 limitations and [compatibility](docs/COMPATIBILITY.md) before bulk imports.
+With `store_failed=false`, unknown historical outcomes are pending without a
+locally retained command payload. Importing them requires an explicit policy
+change and another fetch; no historical success status is invented. Live
+commands under this setting stay in bounded RAM until successful completion,
+so incomplete commands can be lost without ever entering a durable payload.
 
 `doctor` returns sanitized JSON without command bodies, terminal transcripts,
 credentials or full environments. Redirect that JSON to make a diagnostic

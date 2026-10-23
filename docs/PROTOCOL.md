@@ -38,8 +38,20 @@ native Atuin on the UI PTY. Search/navigation then has no destination round trip
 The first handshake necessarily uses the hub-destination link; every UI key
 still traverses the workstation-hub link.
 
-Atuin's exact result file distinguishes empty cancellation, insertion and
-`__atuin_accept__:` acceptance. Response lines are
+The distinct native TUI writes `READY\n` to a private inherited pipe after its
+first results frame and terminal negotiation. The relay holds recovered and new
+user type-ahead until that notification. During negotiation it forwards only
+responses to actual outstanding native CPR/device/keyboard queries. This
+prevents startup from consuming a queued Enter/Tab or arrow as terminal setup
+input. The pipe is not exposed to the destination and never carries history.
+Failure to become ready within five seconds cancels the widget safely.
+
+The exact result file distinguishes empty cancellation and `__atuin_accept__:`
+acceptance. The isolated native extension adds `__atuin_insert__:` to insertion
+results, including nonempty return-query results, under its private protocol
+setting. Stripping exactly one action tag preserves commands literally starting
+with either reserved string. The official stock binary remains unchanged.
+Response lines are
 `!NONCE:REQUEST:DATA:HEX\n` (up to 1024 hex characters each), followed by
 `!NONCE:REQUEST:DONE:insert|accept|cancel\n`. The waiting callback validates
 identity and bounds and decodes using Bash `printf -v`; command text is never
@@ -54,8 +66,10 @@ The relay holds front input until that acknowledgement. On a missing fence the
 callback repeatedly requests ABORT while retaining tty ownership; the relay
 sends one cancel response for that request and ignores stale repeated aborts
 after RELEASE. No callback timeout returns to an ordinary shell while a late
-result can still be in flight. These recovery additions require a new integration
-run; see the acceptance status for the Docker storage blocker.
+result can still be in flight. A real corrupted-REQUEST test exercises the
+30-second ABORT path and verifies the original editor survives without executing
+queued type-ahead. Killing the native UI also restores the remote editor and
+terminal modes. Broader severe interleaving remains a hardening gate.
 
 Timeouts: callback fence 30s, relay handover 35s. UI interaction has no idle
 timeout: the callback keeps ownership until matching DONE or terminal EOF so a

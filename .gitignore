@@ -4,6 +4,9 @@ backups/
 artifacts/*
 !artifacts/widget-baseline.json
 !artifacts/privacy-report.json
+!artifacts/persistence-report.json
+!artifacts/native-tui-scaling.json
+!artifacts/relay-differential.json
 __pycache__/
 *.py[cod]
 *.egg-info/

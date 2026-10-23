@@ -1,0 +1,151 @@
+{
+  "kind": "isolated native Atuin PTY scaling, no SSH or relay",
+  "python": "3.14.2",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.36",
+  "cpu": "Intel(R) Core(TM) i7-14700K",
+  "version": "atuin 18.24.1 (NO_GIT)",
+  "samples_per_size_per_action": 20,
+  "profiles": [
+    {
+      "history_records": 10000,
+      "empty_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 9.960375499986185,
+        "p95": 10.4251939999358,
+        "p99": 10.438683000074889,
+        "minimum": 9.119268999938868,
+        "maximum": 10.438683000074889
+      },
+      "typed_query_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 39.35887349996392,
+        "p95": 41.666283000040494,
+        "p99": 41.984220999893296,
+        "minimum": 36.35914999995293,
+        "maximum": 41.984220999893296
+      },
+      "needle_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 12.03263499996865,
+        "p95": 12.52653200003806,
+        "p99": 12.677847000077236,
+        "minimum": 11.47647099992355,
+        "maximum": 12.677847000077236
+      },
+      "up_navigation_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 1.4745614998901146,
+        "p95": 2.3486180000418244,
+        "p99": 2.3710509999546048,
+        "minimum": 1.2674029999288905,
+        "maximum": 2.3710509999546048
+      },
+      "first_observed_empty_query_start_ms": 10.000288999890472,
+      "cold_cache": "not established; OS page cache was not flushed",
+      "single_query_key_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 5.556141499937439,
+        "p95": 7.383963999927801,
+        "p99": 7.910878999837223,
+        "minimum": 4.587276999927781,
+        "maximum": 7.910878999837223
+      }
+    },
+    {
+      "history_records": 100000,
+      "empty_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 10.282444500035126,
+        "p95": 10.753653999927337,
+        "p99": 10.783412000137105,
+        "minimum": 9.353382999961468,
+        "maximum": 10.783412000137105
+      },
+      "typed_query_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 118.60799399994448,
+        "p95": 121.02779999986524,
+        "p99": 121.11200599997574,
+        "minimum": 112.83053299985113,
+        "maximum": 121.11200599997574
+      },
+      "needle_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 11.845771500020419,
+        "p95": 12.80034199999136,
+        "p99": 13.910081999938484,
+        "minimum": 10.841817000027731,
+        "maximum": 13.910081999938484
+      },
+      "up_navigation_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 1.6508040000644542,
+        "p95": 3.079331999970236,
+        "p99": 3.420379000090179,
+        "minimum": 1.389515000028041,
+        "maximum": 3.420379000090179
+      },
+      "first_observed_empty_query_start_ms": 10.007416000007652,
+      "cold_cache": "not established; OS page cache was not flushed",
+      "single_query_key_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 22.233782000057545,
+        "p95": 23.085425000090254,
+        "p99": 23.3024619999469,
+        "minimum": 21.435013999962393,
+        "maximum": 23.3024619999469
+      }
+    },
+    {
+      "history_records": 1000000,
+      "empty_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 11.163088999978754,
+        "p95": 11.695653000060702,
+        "p99": 11.809998999979143,
+        "minimum": 10.462446000019554,
+        "maximum": 11.809998999979143
+      },
+      "typed_query_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 918.3896554999365,
+        "p95": 949.5876290000069,
+        "p99": 950.0913310000669,
+        "minimum": 875.7325929998387,
+        "maximum": 950.0913310000669
+      },
+      "needle_query_process_start_to_first_results_ms": {
+        "samples": 20,
+        "p50": 12.628217499923267,
+        "p95": 13.699928000050932,
+        "p99": 14.04473199977474,
+        "minimum": 11.75020300001961,
+        "maximum": 14.04473199977474
+      },
+      "up_navigation_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 1.5682819998801278,
+        "p95": 2.034299000115425,
+        "p99": 2.0600269999704324,
+        "minimum": 1.4124570000149106,
+        "maximum": 2.0600269999704324
+      },
+      "first_observed_empty_query_start_ms": 10.499235999986922,
+      "cold_cache": "not established; OS page cache was not flushed",
+      "single_query_key_plus_tab_to_native_exit_ms": {
+        "samples": 20,
+        "p50": 206.7789760000096,
+        "p95": 213.49441999996088,
+        "p99": 225.0311210000291,
+        "minimum": 200.79661599993415,
+        "maximum": 225.0311210000291
+      }
+    }
+  ],
+  "limits": [
+    "First-results readiness is emitted after native negotiation, initial query and complete first frame.",
+    "Query and navigation timings include native Tab insertion, terminal teardown, result-file output and process exit; engine-only/key-to-visible latency is not isolated.",
+    "This measures native component costs only; it does not prove two-hop latency at these record counts.",
+    "The OS page cache was not flushed and a true cold-disk baseline is unverified."
+  ]
+}

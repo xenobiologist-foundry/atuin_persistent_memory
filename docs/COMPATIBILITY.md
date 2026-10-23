@@ -1,6 +1,6 @@
 # Compatibility evidence
 
-Updated 2026-10-23. A source observation, a component test, and a working two-hop
+Updated 2026-10-24. A source observation, a component test, and a working two-hop
 terminal test establish different things. Only the last establishes onward
 native-key integration. See [STATUS.md](STATUS.md) for actual current results.
 
@@ -41,9 +41,12 @@ docker run --rm --entrypoint atuin atuin-ssh:local pty-proxy --help
 For manual TUI probes, start an interactive disposable container with an empty
 `ATUIN_HOME`. Native `history start/end` seed its state, `search -i --result-file`
 captures exact result bytes, and `od -An -tx1` exposes the difference between an
-inserted command, an accepted command and cancellation. A normal search result
-is command text; an acceptance result begins `__atuin_accept__:`. The exact
-result-file path avoids command substitution's trailing-newline removal.
+inserted command, an accepted command and cancellation. Stock native search
+returns command text for insertion and prefixes acceptance with
+`__atuin_accept__:`. The distinct compatibility TUI's result protocol 2 adds
+`__atuin_insert__:` for insertion, disambiguating commands that literally begin
+with the acceptance tag. Actual native and two-hop probes cover both actions.
+The exact result-file path avoids command substitution's trailing-newline removal.
 
 ## Pinned source findings and implications
 
@@ -58,9 +61,29 @@ uses the environment session and command origin, obtains cwd, and discovers Git
 from the local filesystem. Native host matching deliberately includes users on
 the same hostname; directory matching does not qualify by host/account. Setting
 a remote `PWD` cannot establish its Git workspace. The bridge must disclose
-stock host scope and disable local workspace inference until a verified native
-extension supplies the required exact scopes. A fake hostname or copied Python
-search UI is not a compatibility fix.
+stock host scope separately from exact account scope. This project builds a
+distinct pinned `atuin-ssh-search` from the same upstream source, preserving
+its real TUI while adding ACCOUNT and qualified remote directory/workspace
+filtering. Remote Bash supplies workspace metadata; the compatibility binary
+does not discover a same-named hub directory as the remote workspace.
+
+Native history cannot distinguish physical endpoints that report the same
+hostname and account. Connection provenance retains the requested alias and
+effective OpenSSH endpoint separately. If registered endpoints conflict for
+one reported origin, live capture remains `pending_identity` and the remote
+widget refuses a misleading ACCOUNT selection. This is a conservative guard,
+not a machine-mapping solution: old native rows and imported/unregistered
+historical sessions lie outside its evidence and can still overlap in scope.
+`tests/reproduce_duplicate_hostname.py` reproduced the limitation offline with
+fresh native state: both fixture endpoints' commands appeared in one ACCOUNT
+query. The script deliberately calls the native helper directly, bypassing the
+live connection guard. It is a representation probe, not a physical two-host test:
+
+```text
+docker run --rm --network none --entrypoint python atuin-ssh:test tests/reproduce_duplicate_hostname.py
+```
+
+Do not claim separate-machine isolation from aliases alone.
 
 The installed generated Bash integration must be checked after every pinned
 version change. Its modern acceptance mechanism dispatches Readline macros: a
@@ -73,14 +96,14 @@ and execution. The bridge must never `eval` a returned command.
 | Surface | Required proof | Current boundary |
 | --- | --- | --- |
 | Native insert/accept/cancel | Real TUI and remote Readline snapshot | Automated test implemented; results in STATUS |
-| Context overrides | Native search/list output with two hosts/accounts | `ATUIN_HOST_NAME`, `ATUIN_HOST_USER`, session, shell, PWD source reviewed; runtime verification required |
-| Exact account/directory/workspace scopes | Cross-account results and global switching | Stock native TUI gap; blocks required default scope |
-| Native records/privacy/replay | Record-store checks and crash-window faults | Separate version-pinned adapter required; never raw SQL writes |
-| Historical import | Timestamp/multiline/occurrence/collision fixtures | Unknown fields must remain documented/pending; no fabricated historical metadata |
-| Startup/hook composition | Plain-vs-enhanced differential sessions | Profiles, traps, preexec, custom options and existing Atuin need coverage |
+| Context overrides | Native search/list output with two hosts/accounts | Actual native context and real two-hop ACCOUNT recall tested; same-hostname distinct-machine mapping remains a gap |
+| Exact account/directory/workspace scopes | Cross-account results and global switching | Distinct pinned native extension tested against account/host/global/directory/workspace data; no schema changes |
+| Native records/privacy/replay | Record-store checks and crash-window faults | Pinned native helper uses upstream APIs with compatibility checks/stable IDs; strict failed-command privacy, replay and native record cases pass the recorded aggregate |
+| Historical import | Timestamp/multiline/occurrence/collision fixtures | Native/ledger probes passed; unknown fields stay explicit; broader ambiguity/rotation/time-bound parity remains incomplete |
+| Startup/hook composition | Plain-vs-enhanced differential sessions | Five real isolated login PTY probes pass; existing DEBUG preserved with enhancement and capture disabled; replaced PROMPT_COMMAND falls back plain; EXIT/preexec/existing-Atuin combinations need broader coverage |
 | Experimental pty-proxy | Generated integration + coexistence session | Never enable output retention or recursive proxying; active proxy must bypass safely |
-| OpenSSH invocation modes | Native `ssh -G` plus passthrough tests | Explicit commands, queries, subsystems, non-TTY, background and forwarding-only bypass |
-| Terminal transport | Arbitrary bytes, frames, output flood, resize, jobs | Framing component tests plus full-session tests; failures remain MVP blockers |
+| OpenSSH invocation modes | Native `ssh -G` plus passthrough tests | Explicit commands, queries, subsystems, non-TTY, background and forwarding-only bypass; six real SSH cases pass aliases, RemoteCommand, command/status, TCP forwarding, ProxyJump and shared ControlMaster ownership |
+| Terminal transport | Arbitrary bytes, frames, output flood, resize, jobs | Every byte value/unrelated OSC/DCS match plain SSH; >3 MiB ordered background output survives buffering; active-UI resize, jobs/external editor, less/nano/top and password/confirmation input pass |
 
 Nested `sudo`, `su`, SSH, container shells and tmux/screen attachment are separate
 instrumentation scopes. They must remain usable as foreground programs. Their
@@ -95,14 +118,20 @@ probe and prompted a static-musl asset correction. The corrected native binary
 reports `atuin 18.24.1 (c58d2e993d05be423315f6ae3739e9ab3e45eea5)` and its real
 TUI passed the initial eight-case two-hop suite. Native help and the generated
 Bash macro-chain implementation were inspected in that image.
-The later ABORT/RELEASE ownership-recovery protocol and native helper
-replay/locking edits were made after Docker failed and remain unbuilt and
-unverified. Repeat the complete suite against the final installed image.
+Docker storage exhaustion temporarily interrupted development. After recovery,
+installed-image tests exercised ABORT/RELEASE recovery, native record/scoping
+extensions and a READY descriptor after the first complete native UI frame.
+The latter fixed loss of Enter/navigation keys sent with activation. Latest
+status/history-expansion/privacy corrections passed the recorded installed-image
+aggregate: 109 cases in 174.546 s, OK with one dedicated-import skip; that case
+passed separately in 3.065 s. All 28 two-hop, 9 terminal and 6 actual SSH
+compatibility cases passed. The final 14-case offline privacy probe observed
+zero attempted Internet requests.
 
 Actual Bash 5.2 rejects `bind -m vi-insertion` as an invalid keymap. Native Atuin
 uses `vi-insert`. The expanded PTY suite caught this independently: vi-command
 slash worked while vi-insert Ctrl-R fell back to ordinary reverse search. A
-source correction requires a rebuilt image and another passing run.
+source correction to `vi-insert` has passed real two-hop vi insert/command tests.
 
 The effective pinned `ATUIN_HOME=/state/atuin` stores native state below `data/`:
 `history.db`, `records.db`, `meta.db`, the local storage key, and live WAL/SHM
@@ -117,10 +146,10 @@ Run the reproducible metadata-only benchmark in the disposable test client:
 docker compose -f compose.test.yaml run --rm client python tests/benchmark_pty.py --samples 20
 ```
 
-The 2026-10-23 run used 20 samples and 112 native records on an Intel i7-14700K,
+The 2026-10-23 run used 20 samples and 994 native records on an Intel i7-14700K,
 linux/amd64 Docker Desktop kernel 6.6.87.2, Python 3.14.2 and native Atuin 18.24.1.
-Ctrl-R→native header p50/p95/p99 was 14.32/16.04/18.63 ms. Tab→remote shell redraw
-plus independent Readline snapshot was 5.93/8.85/12.05 ms. The unique query was
+Ctrl-R→native header p50/p95/p99 was 21.98/27.21/29.49 ms. Tab→remote shell redraw
+plus independent Readline snapshot was 6.64/8.25/9.20 ms. The unique query was
 already typed in authoritative remote Readline. These wall-clock measurements
 include workstation/hub transport, the destination ownership roundtrip, native
 UI work and the test client. They do not isolate relay overhead, establish
@@ -128,17 +157,23 @@ query/navigation response time or prove the 10k/100k/1m targets. No artificial
 RTT was configured for this baseline.
 
 `tests/latency_proxy.py` supplies an unprivileged, bounded OpenSSH ProxyCommand
-fixture for 150/300 ms added destination RTT. It delays encrypted stream chunks
+fixture for 50/150/300 ms added destination RTT. It delays encrypted stream chunks
 in both directions. This is distinct from complete packet/congestion emulation,
 and does not affect the workstation→hub link. Completed evidence is tracked in
 STATUS; writing the fixture alone does not pass the latency acceptance gate.
+The actual 50/150/300 ms scenarios passed, as did resizing during active native
+UI followed by exact insertion and a remote terminal-size check. See
+[BENCHMARKS.md](BENCHMARKS.md) for separate native 10k/100k/1m and real two-hop
+raw-byte relay differential measurements and their limits.
 
-Actual native Windows Terminal/OpenSSH, a second LAN workstation, native Linux
-Docker Engine and arm64 execution require separate recorded runs. A Linux
+Actual native Windows Terminal/OpenSSH, a second LAN workstation and native Linux
+Docker Engine require separate recorded runs. The image targets linux/amd64;
+arm64 is outside this delivery scope. A Linux
 container test launched from PowerShell does not prove all of those surfaces.
 Native Windows OpenSSH 9.5p2 did complete a noninteractive strict-host-key-checked
-published-port hub → destination command. The earlier-image stopped-hub backup
-was restored into fresh test volumes: 24 regular files matched byte content,
-ownership and modes, and non-root native Atuin search read the restored state.
-Those results do not establish interactive Windows terminal behavior or the
-final native-extension image's restore compatibility.
+published-port hub → destination command. The installed native-extension image
+was recreated without losing native/SSH identity or home state. Its stopped-hub
+PowerShell backup restored into fresh volumes: 22 regular files matched byte
+content, ownership and modes, and non-root native search/store verification
+passed. These results do not establish interactive Windows Terminal or native
+Linux Engine behavior.

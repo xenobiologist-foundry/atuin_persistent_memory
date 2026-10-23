@@ -1,0 +1,19 @@
+{
+  "project": "atuin-ssh-ops-test",
+  "recreated": true,
+  "history_count": 1,
+  "history_ids_metadata_content": "identical",
+  "native_storage_key": "identical",
+  "sshd_host_key": "identical",
+  "home_marker": "retained",
+  "backup_image_id": "sha256:fae9741cd2686a887df1fd5d7e838f4e4388d80d60f407cb03b592c10b728a0e",
+  "backup_consistency": "all hub writers stopped",
+  "restore_project": "atuin-ssh-ops-restore",
+  "restore_regular_files_compared": 22,
+  "restored_file_bytes_uid_gid_modes": "identical",
+  "restored_native_store_verify": "passed offline as nonroot hubuser",
+  "restored_native_history_search": "passed",
+  "powershell_restore_and_doctor": "passed",
+  "original_writer_stopped_before_restored_writer_started": true,
+  "ops_containers_after_verification": "stopped; named volumes preserved"
+}
