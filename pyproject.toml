@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atuin-ssh"
+version = "0.1.0"
+description = "A persistent local Atuin SSH shell hub"
+requires-python = ">=3.14,<3.15"
+dependencies = []
+
+[project.scripts]
+atuin-ssh = "atuin_ssh.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+atuin_ssh = ["bash/*.bash"]

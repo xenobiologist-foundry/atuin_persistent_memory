@@ -1,0 +1,7 @@
+# Preserve Debian's ordinary user startup, then initialize the shell hub once.
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+elif [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+. /etc/atuin-ssh/hub.bash

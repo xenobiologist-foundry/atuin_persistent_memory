@@ -1,0 +1,70 @@
+name: atuin-ssh-test
+services:
+  keys:
+    image: atuin-ssh:test
+    build:
+      context: .
+      target: test
+    entrypoint: ["/usr/local/sbin/test-keys"]
+    volumes:
+      - test-keys:/test-keys
+  destination:
+    image: atuin-ssh:destination-test
+    build:
+      context: .
+      target: destination
+    hostname: destination
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+    volumes:
+      - test-keys:/test-keys
+    healthcheck:
+      test: ["CMD", "/usr/sbin/sshd", "-t"]
+      interval: 2s
+      retries: 20
+  hub:
+    image: atuin-ssh:local
+    build:
+      context: .
+      target: runtime
+    hostname: test-hub
+    environment:
+      ATUIN_SSH_TEST_KEYS: /test-keys
+    ports:
+      - "127.0.0.1:${TEST_HUB_PORT:-22220}:22"
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      destination:
+        condition: service_healthy
+    volumes:
+      - test-state:/state
+      - test-home:/home/hubuser
+      - test-keys:/test-keys
+      - test-keys:/run/keys:ro
+  client:
+    image: atuin-ssh:test
+    build:
+      context: .
+      target: test
+    environment:
+      ATUIN_SSH_TEST_KEYS: /test-keys
+      ATUIN_SSH_E2E: "1"
+      ATUIN_SSH_TEST_KEY: /test-keys/id_ed25519
+      ATUIN_SSH_TEST_HUB: hub
+      ATUIN_SSH_TEST_HUB_USER: hubuser
+      ATUIN_SSH_TEST_DESTINATION: destination
+      ATUIN_SSH_TEST_DEST: destination
+      ATUIN_SSH_TEST_DEST_USER: remote
+    depends_on:
+      hub:
+        condition: service_healthy
+    volumes:
+      - test-keys:/test-keys
+      - test-state:/test-state:ro
+    profiles: ["test"]
+volumes:
+  test-state:
+  test-home:
+  test-keys:

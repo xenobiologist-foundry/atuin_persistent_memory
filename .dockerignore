@@ -1,0 +1,15 @@
+.git
+.env
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+config/authorized_keys
+**/id_rsa*
+**/id_ed25519*
+**/known_hosts
+state
+backups
+artifacts
+.venv
+dist
+*.egg-info

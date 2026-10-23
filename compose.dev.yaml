@@ -1,0 +1,11 @@
+# Invoke as: docker compose -p atuin-ssh-dev -f compose.yaml -f compose.dev.yaml up --build -d
+name: atuin-ssh-dev
+services:
+  hub:
+    image: atuin-ssh:dev
+    build:
+      target: dev
+    environment:
+      PYTHONPATH: /workspace/src
+    volumes:
+      - .:/workspace:ro

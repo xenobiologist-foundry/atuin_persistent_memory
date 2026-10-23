@@ -1,0 +1,32 @@
+name: atuin-ssh
+services:
+  hub:
+    image: atuin-ssh:local
+    build:
+      context: .
+      target: runtime
+      args:
+        HUB_USER: ${HUB_USER:-hubuser}
+    hostname: ${HUB_HOSTNAME:-atuin-hub}
+    environment:
+      HUB_USER: ${HUB_USER:-hubuser}
+    ports:
+      - "${HUB_BIND_ADDRESS:-127.0.0.1}:${HUB_PORT:-2222}:22"
+    volumes:
+      - hub-state:/state
+      - hub-home:/home/${HUB_USER:-hubuser}
+      - type: bind
+        source: ${HUB_AUTHORIZED_KEYS:-./config/authorized_keys}
+        target: /run/keys/authorized_keys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./config/atuin.toml
+        target: /run/config/atuin.toml
+        read_only: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+volumes:
+  hub-state:
+  hub-home:

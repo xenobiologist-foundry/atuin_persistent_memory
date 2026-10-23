@@ -1,0 +1,27 @@
+# Version-pinned native compatibility components
+
+The official `atuin` release remains installed unchanged. This directory builds two distinct executables from upstream Atuin **18.24.1**, commit `c58d2e993d05be423315f6ae3739e9ab3e45eea5`:
+
+- `atuin-ssh-native`: a small JSON-stdin adapter linked to upstream `atuin-client`, `atuin-common`, and `atuin-domain`. It performs native privacy checks, metadata-preserving capture/import, collision probes, and stable-ID reconciliation. It writes through upstream `Sqlite` and `HistoryStore` methods. Its direct SQL is read-only migration inspection.
+- `atuin-ssh-search`: upstream's real TUI, built with `--no-default-features --features client`, with the narrow source changes in `patch_search.py`. It adds an `ACCOUNT` scope alongside native `HOST`, scopes remote directory/workspace by account and host, and consumes explicit remote workspace metadata. `GLOBAL` removes these predicates. It does not replace the installed `atuin` binary or alter the native database schema.
+
+`Dockerfile` downloads the immutable source archive and verifies SHA-256 `1d22939a2c1433730c1ed97ae74ee119d65941a5144e30189cd7e2d76ed46a45`. The helper is copied into its `crates/` workspace. The checked-in `Cargo.lock` contains the upstream lock plus the helper package. Cargo runs with `--locked` under pinned Rust 1.95.0. All compilation occurs inside Linux containers; no Windows Rust/Python installation is used.
+
+The adapter accepts only the pinned native version, with the exact official commit string when present. Before constructing native writable database handles it checks every applied history, record, and metadata migration version, checksum, and success flag through read-only connections. A different, older, newer, incomplete, or modified existing migration set is refused. Empty new state is initialized through native constructors. A stock Atuin upgrade must be handled deliberately before updating these compatibility components. The helper never downgrades a database.
+
+Operations are `check`, `filter`, `probe`, `start`, `write`, `import`, and `discard`. JSON replies contain states and IDs, never command bodies. `filter` uses native `History::should_save`, including native history/cwd regex and secret filters, before the Python worker persists payloads. `start` uses the supplied stable ID and actual remote timestamp and writes the native incomplete convention. `write` updates completion and appends through the native record store. Unknown imported fields use native `unknown` cwd and `-1` exit/duration; the bridge records that the session is unknown and whether a timestamp was synthesized.
+
+The supported command/result bound is **256 KiB of UTF-8 bytes** for capture, import, and native selection. Longer data is rejected visibly or cancels selection; it is never truncated into another command. This leaves room for encoded fields inside the protocol's 1 MiB frame bound. Initial queries above 64 KiB use an inherited Linux `memfd` read by the isolated native extension; this avoids Linux's per-environment-string limit without persisting the editing buffer to a filesystem. The descriptor is closed with the widget result. Native version/storage checks run before a widget result file is allocated. Missing compatibility components fail exact remote search instead of silently widening account/directory/workspace scope.
+
+An owner-only local file lock serializes helper mutations across capture/import processes. Each operation preserves stable history identity. A retry scans/decrypts native records rather than deduplicating command text. Existing tombstones dominate replay, including when the materialized history view was lost; an existing create restores only its exact native facts. A native uniqueness collision remains pending in bridge metadata. Reconciliation currently scans the native record store, so crash recovery can be costly for large histories. Normal successful completion does not perform that scan. Native daemon operation is deliberately refused by the write adapter until its indexing/visibility behavior has been verified. Stock Atuin remains available.
+
+Validation status at the storage-device interruption: the helper and initial isolated search extension compiled under Rust 1.95.0. Eleven Python storage/privacy/import tests passed inside a Python 3.14 Linux container. Six additional tests against actual native executables are staged in `tests/test_storage.py`; they require the final image and remain unverified. Later tombstone recovery, discard, and helper-lock source changes require another container build. No claim of a passed native storage/record integration gate follows from the unit tests or the initial successful compilations.
+
+After Docker is healthy, build the final test image and run the installed-package suite:
+
+```powershell
+docker build --target test --tag atuin-ssh:test .
+docker run --rm --entrypoint python atuin-ssh:test -m unittest discover -s /opt/atuin-ssh/tests -p test_storage.py -v
+```
+
+The native tests use fresh temporary state and cover actual native visibility/record verification, replay, account/machine/global/directory/workspace scoping, cross-host uniqueness conflicts, privacy, incompatible migration rejection, missing-view reconstruction, and deletion no-resurrection. Full concurrent native deletion races, native daemon search, import scale, and end-to-end terminal behavior require further integration evidence.

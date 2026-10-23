@@ -1,0 +1,20 @@
+# All native state is local to this hub. No account or sync service is used.
+auto_sync = false
+update_check = false
+enter_accept = true
+filter_mode = "host"
+filter_mode_shell_up_key_binding = "session"
+search_mode = "fuzzy"
+inline_height = 20
+exit_mode = "return-original"
+show_help = true
+show_tabs = true
+
+[sync]
+records = true
+
+[daemon]
+enabled = false
+
+[stats]
+common_prefix = ["sudo"]
