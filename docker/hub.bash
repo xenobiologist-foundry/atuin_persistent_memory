@@ -2,6 +2,9 @@
 [[ $- == *i* ]] || return 0
 [[ ${_ATUIN_SSH_HUB_INITIALIZED:-0} == 1 ]] && return 0
 _ATUIN_SSH_HUB_INITIALIZED=1
+# sshd creates a fresh login environment rather than inheriting Docker's LANG.
+# Supply a Unicode-capable default without overriding client/profile choices.
+export LANG="${LANG:-C.UTF-8}"
 export ATUIN_HOME=/state/atuin
 export ATUIN_CONFIG_DIR=/state/atuin
 export ATUIN_SSH_STATE_DIR=/state/bridge

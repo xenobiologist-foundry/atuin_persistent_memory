@@ -114,6 +114,10 @@ search scope, so the default HOST scope at the hub can hide destination history.
 This editor is loaded only in the hub; onward destinations keep their temporary
 Bash/Readline integration.
 
+SSH logins use `LANG=C.UTF-8` when `LANG` is unset or empty, preserving explicit
+client/profile locale settings. A first-use `tput cache ... done` notice from
+ble.sh means it successfully generated its terminal cache.
+
 To disable inline suggestions, put `export ATUIN_SSH_HUB_AUTOSUGGEST=0` in the
 hub user's `~/.bashrc` **before** its `/etc/atuin-ssh/hub.bash` source line, then
 reconnect. The bundled ble.sh version is pinned and updated through image builds;

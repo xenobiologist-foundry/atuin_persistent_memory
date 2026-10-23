@@ -8,6 +8,53 @@ import uuid
 
 import test_ssh_integration as ssh_fixture
 import test_two_hop as flow
+from pty_client import PTYClient
+
+
+@unittest.skipUnless(flow.E2E, "disposable SSH fixture required")
+class HubLoginLocale(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ssh_fixture.OpenSSHCompatibility.setUpClass()
+        cls.addClassCleanup(ssh_fixture.OpenSSHCompatibility.doClassCleanups)
+        cls.config = ssh_fixture.OpenSSHCompatibility.config
+        cls.hub = ssh_fixture.OpenSSHCompatibility.hub
+
+    def login_locale(self, supplied):
+        # This isolated -F config has no SendEnv and skips the system client
+        # config, so the workstation's own locale cannot mask an empty login.
+        argv = ["/usr/bin/ssh", "-F", str(self.config), "-tt"]
+        if supplied:
+            argv.extend(["-o", "SetEnv=" + " ".join(f"{name}={value}"
+                                                     for name, value in supplied.items())])
+        argv.append(self.hub)
+        client = PTYClient(argv)
+        self.addCleanup(client.close)
+        token = uuid.uuid4().hex
+        client.send("printf '\\n__LOGIN_LOCALE_" + token + "__%s|%s|%s|%s|%s|%s|%s__\\n' "
+                    '"${LANG-unset}" "${LC_ALL-unset}" "${LC_CTYPE-unset}" "${LC_TIME-unset}" '
+                    '"${BLE_ATTACHED-unset}" "${BLE_VERSION-unset}" '
+                    '"$(type -t ble/complete/auto-complete/source:atuin-history)"\n')
+        found = client.expect(re.compile(re.escape(("\r\n__LOGIN_LOCALE_" + token + "__").encode())
+                                         + rb"([^\r\n]*)__\r\n"), timeout=30)
+        fields = found[1].decode().split("|")
+        self.assertEqual(len(fields), 7)
+        self.assertEqual(fields[4], "1", "ble.sh must attach on the first hub login")
+        self.assertIn("d81fd54", fields[5])
+        self.assertEqual(fields[6], "function", "native Atuin suggestion source must be available")
+        return fields[:4], bytes(client.transcript)
+
+    def test_login_without_supplied_locale_uses_utf8_without_warning(self):
+        for supplied in ({}, {"LANG": ""}):
+            with self.subTest(supplied=supplied):
+                locale, transcript = self.login_locale(supplied)
+                self.assertEqual(locale, ["C.UTF-8", "unset", "unset", "unset"])
+                self.assertNotIn(b"suspicious environment", transcript.lower())
+
+    def test_login_preserves_explicit_lang_and_locale_categories(self):
+        locale, _ = self.login_locale({"LANG": "C", "LC_ALL": "C.UTF-8",
+                                       "LC_CTYPE": "C.UTF-8", "LC_TIME": "C"})
+        self.assertEqual(locale, ["C", "C.UTF-8", "C.UTF-8", "C"])
 
 
 @unittest.skipUnless(flow.E2E, "disposable SSH fixture required")

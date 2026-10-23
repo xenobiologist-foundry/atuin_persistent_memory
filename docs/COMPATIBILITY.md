@@ -195,6 +195,14 @@ source, which performs local prefix searches. Existing native scope and privacy
 settings apply; no separate suggestion database or remote service is introduced.
 Set `ATUIN_SSH_HUB_AUTOSUGGEST=0` before the hub startup source line to opt out.
 
+sshd does not inherit the image's locale environment. Hub initialization now
+exports `LANG=C.UTF-8` if LANG is unset or empty before loading ble.sh, preserving
+nonempty LANG and all explicit LC_* settings. Four installed-image real SSH
+checks passed in 7.226 seconds: absent/empty LANG without the suspicious-environment
+warning, explicit locale preservation, ghost-text acceptance/execution and native
+Ctrl-R/cancel. The normal first-use `tput cache ... done` message reports successful
+terminal cache generation.
+
 Two actual SSH tests verify visible ghost text, Right Arrow insertion without
 execution, Enter execution of the entire suggestion, and native Ctrl-R/cancel
 without accidental execution. Three Linux-PTY offline strace cases cover editor

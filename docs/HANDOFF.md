@@ -31,7 +31,7 @@ destination integration still uses its existing Bash/Readline. Its update hook
 refuses downloads. `ATUIN_SSH_HUB_AUTOSUGGEST=0` must be set before hub startup
 to disable it. Native HOST scope is unchanged.
 
-The installed inline-suggestion runtime image is
+The full inline-suggestion regression used runtime image
 `sha256:9ddf5ac93a4b40a7e16bf531f880fe636dac7bf9e37ee3a7b4b6a9515ed7674d`.
 Its final modern test image is
 `sha256:7cfa6f68b552d5b4c3d7ec3642f6b50fa775d54e99c2cdc307629524507c0bb2`;
@@ -40,6 +40,16 @@ the corresponding legacy test image is
 Completed review/autocomplete/legacy fixture containers and networks were
 removed; their named volumes were preserved. Production was inspected afterward
 and remained running its original `sha256:55d6ebd29244accb675611d3ea26aea09d3596f8971236298b4a9cde05f305a8` image.
+
+A later user login exposed empty LANG under sshd. Hub initialization now supplies
+`C.UTF-8` only for unset/empty LANG before loading ble.sh; client/profile LANG
+and LC_* choices are preserved. The installed locale runtime is
+`sha256:5099384dd20a87613d2cd755663fdd5cdd156b49ebcb2f3a856c773f8d128fcf`;
+test image `sha256:d8e95093e0a352fc673ec553f8bbbe95ea08b3a612267dd3e3c4871356d9b3c3`.
+Focused real SSH tests passed all 4 cases in 7.226 seconds, including missing/
+empty LANG, explicit locale preservation and existing native suggestion/search
+behavior. This narrow follow-up did not repeat the full aggregate or recreate
+production. ble.sh's first-use tput cache completion is normal initialization.
 
 The user's running production container was deliberately left on its old image
 while independent projects tested candidate tags. Do not silently recreate it
