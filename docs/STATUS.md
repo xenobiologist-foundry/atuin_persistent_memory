@@ -33,3 +33,28 @@ adapter image, then prove real capture/exact scopes and 150/300 ms type-ahead.
 The latest ABORT/RELEASE recovery protocol and native replay/locking changes also
 require a full rebuild and acceptance rerun; earlier evidence does not establish
 that final source's behavior.
+
+## Remaining parity gates
+
+Every unverified item below blocks claiming the brief's complete MVP. These are
+not established failures unless explicitly identified as a known gap.
+
+| Area | Remaining evidence or known gap |
+| --- | --- |
+| Final native key contract | Rerun complete original suite after ABORT/RELEASE, vi fix, long-query memfd and cleanup changes; Enter/Tab/Escape bursts, custom disabled initial bindings and resize during UI |
+| Startup/hook parity | Differential profiles exactly once, startup output, string/array PROMPT_COMMAND, existing DEBUG/EXIT/preexec, shell options and existing Atuin; noninteractive rcfile side effects and replaced PROMPT_COMMAND are known bootstrap gaps; incompatible DEBUG/functrace currently degrades capture |
+| Shell editing and applications | Full multiline/heredoc/history expansion, external editor, long command bounds; Vim/nano/less/top/REPL/password/confirmation; Ctrl-C/Z/D, fg and OpenSSH local suspension/escapes |
+| Native SSH compatibility | Real aliases, combined flags, explicit commands, configured RemoteCommand, jump/proxy, forwarding/multiplexing, key/password/keyboard-interactive/agent/cert authentication; component parsing alone is insufficient |
+| Output and recovery | Byte differential versus plain SSH; sustained background output/backpressure, terminal queries, malformed/interleaved frames, stale generations, TUI/worker/relay failures and either transport disconnect |
+| Capture lifecycle | Exactly one accepted compound execution, functions/loops/pipelines/subshells/substitutions, nonzero statuses, background launch, exit/exec/incomplete/disconnect, history policy and canceled input; actual native visibility and record integrity |
+| Context and native scopes | Two hosts/accounts, same paths and aliases, session isolation, remote Git roots, GLOBAL removal of ACCOUNT restrictions; machines with identical hostname still need an identity mapping solution and must not be silently merged |
+| Storage and privacy | Actual stable-ID crash-window replay, deletion/tombstones, concurrent writers/deleters, native uniqueness collisions, DB busy/read-only/full/corruption, daemon capability; privacy filters and durable outbox exclusions before payload storage; final aggregate diagnostics need rerun |
+| Imports | Native timestamp/unknown-field preservation, repeat/append/rotation/truncation/overlap, ambiguous multiline reports, time bounds, dry-run prospective conflicts, interrupted resumability, ordinary local Atuin interoperability and native record integrity |
+| Central sharing | Concurrent authorized workstation immediate visibility and restart; peer volatile-ingress visibility window needs testing; independent hubs remain separate, no copied concurrent writer identities |
+| Deployment and privacy | Final installed image without checkout, fresh private-state audit, no-install destination inventory, final-image recreate/backup/restore; strace attempted-egress probe and offline operation; deliberate DNS/HTTPS/onward SSH still functional |
+| Actual host/LAN/platform tests | Interactive Windows Terminal keys, native Linux Engine image/network/persistence/restore, second authorized LAN workstation and boundary rejection, LAN IP/DNS and VPN diagnostics; arm64 is not supported by evidence |
+| Performance | Cold/warm first results, query/navigation response, local relay differential, separate workstation/hub and hub/destination RTT, 50/150/300 ms scenarios, 10k/100k/1m records and multiple sessions |
+
+Nested inner shells deliberately remain usable pass-through scopes, with no
+claimed inner capture/enhancement. This documented boundary follows the brief;
+its complete foreground-application behavior still needs the tests above.
