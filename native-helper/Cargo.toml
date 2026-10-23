@@ -5,6 +5,18 @@ edition = "2024"
 rust-version = "1.95.0"
 build = "build.rs"
 
+[features]
+benchmark = []
+
+[[bin]]
+name = "atuin-ssh-native"
+path = "src/main.rs"
+
+[[bin]]
+name = "atuin-ssh-bench-seed"
+path = "src/bin/bench_seed.rs"
+required-features = ["benchmark"]
+
 [dependencies]
 atuin-client = { path = "../atuin-client", default-features = false }
 atuin-common = { path = "../atuin-common", features = ["sqlite"] }

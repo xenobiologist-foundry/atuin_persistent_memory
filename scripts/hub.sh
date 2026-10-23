@@ -20,10 +20,20 @@ case "$action" in
     start) "${compose[@]}" up --detach ;;
     stop) "${compose[@]}" stop ;;
     doctor) "${compose[@]}" exec --no-TTY hub /bin/bash -c 'exec runuser -u "$HUB_USER" -- env ATUIN_HOME=/state/atuin ATUIN_CONFIG_DIR=/state/atuin ATUIN_SSH_STATE_DIR=/state/bridge atuin-ssh doctor' ;;
-    test)
-        docker compose --project-name atuin-ssh-test --file compose.test.yaml up --build --detach hub destination
-        docker compose --project-name atuin-ssh-test --file compose.test.yaml run --rm client
-        docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/privacy-probe.py
+    test|test-import)
+        if [[ $action == test ]]; then
+            docker compose --project-name atuin-ssh-test --file compose.test.yaml up --build --detach hub destination
+            docker compose --project-name atuin-ssh-test --file compose.test.yaml run --rm client
+            docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/privacy-probe.py
+        fi
+        import_compose=(docker compose --project-name atuin-ssh-import-check --file compose.test.yaml)
+        cleanup_import() { TEST_HUB_PORT=22224 "${import_compose[@]}" down; }
+        trap cleanup_import EXIT
+        TEST_HUB_PORT=22224 "${import_compose[@]}" up --no-build --detach hub destination
+        TEST_HUB_PORT=22224 "${import_compose[@]}" exec --no-TTY destination /bin/bash -c 'install -m 0600 -o remote -g remote /dev/null /home/remote/import_history; touch /home/remote/.bash_profile; grep -qxF "export HISTFILE=/home/remote/import_history" /home/remote/.bash_profile || printf "\nexport HISTFILE=/home/remote/import_history\n" >> /home/remote/.bash_profile; chown remote:remote /home/remote/.bash_profile; chmod 0600 /home/remote/.bash_profile'
+        TEST_HUB_PORT=22224 "${import_compose[@]}" run --rm import-client
+        cleanup_import
+        trap - EXIT
         ;;
     backup|restore)
         if [[ $action == restore ]]; then "${compose[@]}" create hub; fi
@@ -52,5 +62,5 @@ case "$action" in
             echo 'Restored stopped hub. Keep original stopped when moving writer identity.'
         fi
         ;;
-    *) echo 'Usage: hub.sh {setup [public-key]|build|start|stop|doctor|test|backup [directory]|restore archive}' >&2; exit 2 ;;
+    *) echo 'Usage: hub.sh {setup [public-key]|build|start|stop|doctor|test|test-import|backup [directory]|restore archive}' >&2; exit 2 ;;
 esac

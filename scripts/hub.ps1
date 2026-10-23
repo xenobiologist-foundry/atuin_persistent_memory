@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Position=0)][ValidateSet('setup','build','start','stop','doctor','test','backup','restore')][string]$Action = 'doctor',
+    [Parameter(Position=0)][ValidateSet('setup','build','start','stop','doctor','test','test-import','backup','restore')][string]$Action = 'doctor',
     [string]$PublicKey,
     [string]$Project = 'atuin-ssh',
     [string]$BackupDirectory,
@@ -23,6 +23,21 @@ function Get-Hub {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the hub container.' }
     return $inspection[0]
 }
+function Invoke-ImportVerification {
+    $priorTestPort = [Environment]::GetEnvironmentVariable('TEST_HUB_PORT', 'Process')
+    try {
+        $env:TEST_HUB_PORT = '22224'
+        Invoke-Docker compose --project-name atuin-ssh-import-check --file compose.test.yaml up --no-build --detach hub destination
+        Invoke-Docker compose --project-name atuin-ssh-import-check --file compose.test.yaml exec --no-TTY destination /bin/bash -c 'install -m 0600 -o remote -g remote /dev/null /home/remote/import_history; touch /home/remote/.bash_profile; grep -qxF "export HISTFILE=/home/remote/import_history" /home/remote/.bash_profile || printf "\nexport HISTFILE=/home/remote/import_history\n" >> /home/remote/.bash_profile; chown remote:remote /home/remote/.bash_profile; chmod 0600 /home/remote/.bash_profile'
+        Invoke-Docker compose --project-name atuin-ssh-import-check --file compose.test.yaml run --rm import-client
+    } finally {
+        try {
+            Invoke-Docker compose --project-name atuin-ssh-import-check --file compose.test.yaml down
+        } finally {
+            [Environment]::SetEnvironmentVariable('TEST_HUB_PORT', $priorTestPort, 'Process')
+        }
+    }
+}
 switch ($Action) {
     'setup' {
         if (!$PublicKey) { $PublicKey = Join-Path $HOME '.ssh/id_ed25519.pub' }
@@ -43,7 +58,9 @@ switch ($Action) {
         Invoke-Docker compose --project-name atuin-ssh-test --file compose.test.yaml up --build --detach hub destination
         Invoke-Docker compose --project-name atuin-ssh-test --file compose.test.yaml run --rm client
         Invoke-Docker run --rm --network none --entrypoint python atuin-ssh:test /opt/atuin-ssh/privacy-probe.py
+        Invoke-ImportVerification
     }
+    'test-import' { Invoke-ImportVerification }
     'backup' {
         $hubInfo = Get-Hub
         $stateMount = $hubInfo.Mounts | Where-Object Destination -eq '/state'

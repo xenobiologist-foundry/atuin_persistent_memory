@@ -1,5 +1,6 @@
 # linux/amd64 is the tested initial architecture; do not imply arm64 support.
 ARG PYTHON_IMAGE=python:3.14.2-slim-bookworm@sha256:34bb71a7de6dbecc839d8d6f8aaff8c4bf67ce01634764eaf929cb64d3ae315e
+ARG DESTINATION_IMAGE=debian:bookworm-slim@sha256:ec31d744f83f4a73447ba045aaab9409997efe5cc706eca4890c1be36cc1606a
 FROM rust:1.95.0-slim-bookworm@sha256:6f9e63259f12e1e599296f5ecfed2bae46de4af0ee0525dd8b89c046e236d5c5 AS native-source
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git pkg-config libssl-dev build-essential cmake protobuf-compiler \
@@ -36,6 +37,12 @@ RUN --mount=type=cache,id=atuin-ssh-rust195-registry,target=/usr/local/cargo/reg
     && install -m 0755 target/release/atuin-ssh-native /out/atuin-ssh-native \
     && install -m 0755 target/release/atuin /out/atuin-ssh-search
 
+FROM native-search-build AS benchmark-build
+RUN --mount=type=cache,id=atuin-ssh-rust195-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=atuin-ssh-rust195-amd64-target,target=/opt/atuin/target,sharing=locked \
+    cargo build --release --locked -p atuin-ssh-native --features benchmark --bin atuin-ssh-bench-seed \
+    && install -m 0755 target/release/atuin-ssh-bench-seed /out/atuin-ssh-bench-seed
+
 FROM ${PYTHON_IMAGE} AS foundation
 ARG ATUIN_VERSION=18.24.1
 ARG ATUIN_SHA256=fe03f652d6545a9d8795b3c2abb84bcddfe831e4b7effb0c2d191a0d70e498a0
@@ -67,6 +74,7 @@ ARG HUB_UID=1000
 ARG HUB_GID=1000
 COPY --from=native-search-build /out/atuin-ssh-native /usr/local/bin/atuin-ssh-native
 COPY --from=native-search-build /out/atuin-ssh-search /usr/local/bin/atuin-ssh-search
+COPY --from=native-source /opt/atuin/LICENSE /usr/share/licenses/atuin/LICENSE
 RUN groupadd --gid "${HUB_GID}" "${HUB_USER}" \
     && useradd --uid "${HUB_UID}" --gid "${HUB_GID}" --create-home --shell /bin/bash "${HUB_USER}" \
     && usermod --password '*' "${HUB_USER}" \
@@ -100,7 +108,7 @@ ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/sbin/atuin-ssh-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
 
 # The fixture does not install the application or Atuin on its destination.
-FROM ${PYTHON_IMAGE} AS destination
+FROM ${DESTINATION_IMAGE} AS destination
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash openssh-server openssh-client ca-certificates less nano procps tini \
@@ -112,11 +120,13 @@ COPY docker/sshd_config /etc/ssh/sshd_config
 COPY docker/destination-entrypoint.sh /usr/local/sbin/destination-entrypoint
 RUN chmod 0755 /usr/local/sbin/destination-entrypoint \
     && sed -i '/^SetEnv /d' /etc/ssh/sshd_config
+RUN ! command -v python && ! command -v python3 && ! command -v atuin
 EXPOSE 22
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/sbin/destination-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
 
 FROM runtime AS test
+COPY --from=benchmark-build /out/atuin-ssh-bench-seed /usr/local/bin/atuin-ssh-bench-seed
 RUN apt-get update && apt-get install -y --no-install-recommends strace \
     && rm -rf /var/lib/apt/lists/*
 COPY tests /opt/atuin-ssh/tests

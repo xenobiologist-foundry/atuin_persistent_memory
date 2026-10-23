@@ -2,6 +2,7 @@
 platform = "linux/amd64"
 python = "3.14.2"
 python_image = "python:3.14.2-slim-bookworm@sha256:34bb71a7de6dbecc839d8d6f8aaff8c4bf67ce01634764eaf929cb64d3ae315e"
+destination_image = "debian:bookworm-slim@sha256:ec31d744f83f4a73447ba045aaab9409997efe5cc706eca4890c1be36cc1606a"
 rust = "1.95.0"
 rust_image = "rust:1.95.0-slim-bookworm@sha256:6f9e63259f12e1e599296f5ecfed2bae46de4af0ee0525dd8b89c046e236d5c5"
 atuin = "18.24.1"

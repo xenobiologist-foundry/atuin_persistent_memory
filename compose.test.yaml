@@ -64,6 +64,20 @@ services:
       - test-keys:/test-keys
       - test-state:/test-state:ro
     profiles: ["test"]
+  import-client:
+    image: atuin-ssh:test
+    user: hubuser
+    environment:
+      HOME: /home/hubuser
+      ATUIN_SSH_IMPORT_E2E: "1"
+      ATUIN_SSH_IMPORT_TARGET: remote@destination
+    command: ["python", "-m", "unittest", "discover", "-s", "tests", "-p", "test_storage.py", "-k", "ImportCli", "-v"]
+    depends_on:
+      hub:
+        condition: service_healthy
+    volumes:
+      - test-home:/home/hubuser
+    profiles: ["import"]
 volumes:
   test-state:
   test-home:

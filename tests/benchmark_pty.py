@@ -63,7 +63,7 @@ def run(samples: int) -> dict:
                        "Includes workstation-to-hub transport, destination ownership roundtrip, native UI startup/rendering and test client terminal processing.",
                        "Return includes result transport and a second remote Readline snapshot callback.",
                        "No artificial RTT was configured. The two network RTTs and local relay-only overhead are not isolated by this measurement.",
-                       "Query/navigation p95, direct-OpenSSH differential and cold/warm storage/cache isolation remain unmeasured."],
+                       "This run does not measure query/navigation p95, direct-OpenSSH differential or cold/warm cache isolation; separate reports cover native scaling and relay differential."],
         }
     finally:
         case.doCleanups()
