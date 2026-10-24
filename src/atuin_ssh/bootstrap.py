@@ -4,12 +4,56 @@ import os
 import shlex
 
 
-def remote_command(nonce: str, session: str, *, force_bash: bool = False) -> str:
+def remote_command(nonce: str, session: str, *, force_bash: bool = False, bundle=None) -> str:
     payload = files("atuin_ssh").joinpath("bash/remote.bash").read_text()
     payload = payload.replace("@NONCE@", nonce).replace("@SESSION@", session)
     payload = payload.replace("@MIN_BASH_MAJOR@", "4" if force_bash else "5")
     payload = payload.replace("@BIND_CTRL_R@", "0" if os.environ.get("ATUIN_SSH_DISABLE_CTRL_R") == "1" else "1")
     payload = payload.replace("@BIND_UP@", "0" if os.environ.get("ATUIN_SSH_DISABLE_UP") == "1" else "1")
+    editor_payload = payload
+    if bundle is not None:
+        setup = files("atuin_ssh").joinpath("bash/blesh_setup.bash").read_text()
+        setup = (setup.replace("@NONCE@", nonce).replace("@SESSION@", session)
+                 .replace("@BUNDLE_SIZE@", str(bundle.size)).replace("@BUNDLE_SHA256@", bundle.sha256))
+        adapter = files("atuin_ssh").joinpath("bash/remote_ble.bash").read_text()
+        adapter = adapter.replace("@BIND_CTRL_R@", "0" if os.environ.get("ATUIN_SSH_DISABLE_CTRL_R") == "1" else "1")
+        adapter = adapter.replace("@BIND_UP@", "0" if os.environ.get("ATUIN_SSH_DISABLE_UP") == "1" else "1")
+        # Reuse only the representation/clock/framing primitives. GNU
+        # Readline bindings and DEBUG lifecycle hooks are replaced by the
+        # destination BLE adapter in this explicitly selected editor mode.
+        common = payload[:payload.index("_as_accept_snapshot()")]
+        editor_payload = r'''_as_ble_prompt_compatible() {
+    local _as_prompt_hook
+    for _as_prompt_hook in "${PROMPT_COMMAND[@]-}"; do
+        [[ $_as_prompt_hook != *[!$' \t\n']* ]] || return 1
+    done
+}
+_as_editor_prompt_ok=1
+if ! _as_ble_prompt_compatible; then
+    _as_editor_prompt_ok=0
+    printf '%s\n' 'atuin-ssh: custom prompt hooks use destination GNU Readline; inline suggestions are unavailable for this session.' >&2
+fi
+unset -f _as_ble_prompt_compatible
+if [[ $_as_editor_prompt_ok == 1 && -z ${_AS_ORIGINAL_DEBUG-} && ! -o functrace && -z ${_AS_NONCE-} ]] &&
+   ! declare -F ble-attach >/dev/null && (unset PROMPT_COMMAND 2>/dev/null); then
+''' + setup + r'''
+fi
+if [[ -n ${_AS_BLE_DIR-} ]]; then
+    exec {_as_ble_adapter_fd}<<'__ATUIN_SSH_BLE_EDITOR__'
+''' + common + adapter + r'''
+__ATUIN_SSH_BLE_EDITOR__
+    if ! builtin source /dev/fd/$_as_ble_adapter_fd; then
+        _as_boot_seq=${_as_seq:-${_as_boot_seq:-0}}
+        unset _AS_NONCE _AS_SESSION
+        declare -F _as_ble_cleanup >/dev/null && _as_ble_cleanup
+''' + payload + r'''
+    fi
+    exec {_as_ble_adapter_fd}<&-
+    unset _as_ble_adapter_fd
+else
+''' + payload + r'''
+fi
+'''
     unsupported_version = ("BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4)"
                            if force_bash else "BASH_VERSINFO[0] < 5")
     version_notice = ("atuin-ssh: Bash 4.4 or newer is required for requested native history integration; continuing with an ordinary Bash login shell"
@@ -45,7 +89,7 @@ for _as_startup_file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profil
 done
 unset _as_startup_file
 _AS_ORIGINAL_DEBUG=$(trap -p DEBUG)
-''' + payload
+''' + editor_payload
     launcher += r'''if [[ -o posix || ${POSIXLY_CORRECT+x} ]]; then
     printf '%s\n' 'atuin-ssh: existing POSIX Bash startup is unsupported for native integration; continuing with an ordinary Bash login shell' >&2
     exec bash --login -i

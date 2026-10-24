@@ -78,7 +78,8 @@ class OpenSSHCompatibility(unittest.TestCase):
         client = PTYClient(["/usr/bin/ssh", "-F", str(self.config), "-tt", self.hub])
         self.addCleanup(client.close)
         token = uuid.uuid4().hex
-        client.send("PS1='__SSH_HUB__> '; printf '\\n__SSH_READY_" + token + "__\\n'\n")
+        client.send("PS1='__SSH_HUB__> '; export ATUIN_SSH_REMOTE_AUTOSUGGEST=0; "
+                    "printf '\\n__SSH_READY_" + token + "__\\n'\n")
         client.expect(("\r\n__SSH_READY_" + token + "__\r\n").encode(), timeout=30)
         client.expect(b"__SSH_HUB__> ")
         client.buffer.clear()

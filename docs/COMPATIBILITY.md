@@ -6,7 +6,10 @@ native-key integration. See [STATUS.md](STATUS.md) for actual current results.
 
 The workstation is a terminal/OpenSSH client. The hub owns the installed native
 Atuin and its local persistent state. The destination owns Bash's authoritative
-Readline buffer; its integration consists of session-only Bash functions.
+editor. GNU Readline remains available with `--no-autosuggest`; the user-selected
+default ble.sh mode temporarily loads the pinned editor and session files on the
+destination. This explicitly extends the original functions-only/Readline
+requirement, selected after comparing it with a hub-side replacement editor.
 
 Automatic enhancement requires a Bash login shell and Bash major version 5 or
 later. A non-Bash account shell is preserved. Explicit
@@ -103,7 +106,8 @@ and execution. The bridge must never `eval` a returned command.
 | Surface | Required proof | Current boundary |
 | --- | --- | --- |
 | Native insert/accept/cancel | Real TUI and remote Readline snapshot | Automated test implemented; results in STATUS |
-| Hub inline suggestions | Real SSH typing, acceptance and native capture | Pinned ble.sh uses Atuin's native prefix-history source; Right Arrow inserts without execution, Enter executes the complete line, and Ctrl-R still opens native Atuin. Destination editors do not load ble.sh |
+| Hub inline suggestions | Real SSH typing, acceptance and native capture | Pinned ble.sh uses Atuin's native prefix-history source; Right Arrow inserts without execution, Enter executes the complete line, and Ctrl-R still opens native Atuin |
+| Destination inline suggestions | Temporary editor and hub-native history | Default packaged mode loads pinned ble.sh into session-private destination files; exact ACCOUNT prefix lookup stays on the hub. Explicit --no-autosuggest retains GNU Readline. See protocol and STATUS for current evidence |
 | Context overrides | Native search/list output with two hosts/accounts | Actual native context and real two-hop ACCOUNT recall tested; same-hostname distinct-machine mapping remains a gap |
 | Exact account/directory/workspace scopes | Cross-account results and global switching | Distinct pinned native extension tested against account/host/global/directory/workspace data; no schema changes |
 | Native records/privacy/replay | Record-store checks and crash-window faults | Pinned native helper uses upstream APIs with compatibility checks/stable IDs; strict failed-command privacy, replay and native record cases pass the recorded aggregate |
@@ -226,6 +230,59 @@ code. The fixture database checks use read-only SQL as the hub's database owner,
 so SQLite can maintain its live WAL auxiliary files; an immutable read-only view
 would incorrectly hide committed WAL data. Completed fixture containers/networks
 were removed with their named volumes preserved.
+
+## Temporary destination ble.sh
+
+The user selected destination editing with hub-native history on 2026-10-24.
+Eligible packaged connections now load the same pinned ble.sh version into a
+private destination session directory. `--no-autosuggest` retains GNU Readline;
+`ATUIN_SSH_REMOTE_AUTOSUGGEST=0` changes the default, and explicit `--autosuggest`
+overrides it. A nonempty user PROMPT_COMMAND, existing editor/debug hooks or
+unsupported prerequisites fall back before editor initialization. An actual
+startup read test verifies scalar/array prompt hooks keep their own input without
+requesting a bundle; this prevents a first-attach input deadlock and the pinned
+editor's main-prompt reuse in nested reads.
+
+The deterministic USTAR archive is 3,799,040 bytes, SHA256
+`63a0c475827efb41f8156a28b8e057749c28f03fc4cc9b5989e86b204ee945ee`.
+It contains only validated regular files/directories, including the license and
+disabled updater hook. Existing tar/base64/awk/stty and a supported SHA256 tool
+are used; no destination Python, Atuin or Internet downloads are needed. Four
+bundle/PTY tests cover unsafe archive entries, digest/size bounds, binary queued
+input, extraction/cleanup and cancellation ownership on Bash 5.2/4.4. An actual
+full-archive local PTY observation took 3.522 seconds with buffered line reads;
+the initial fixed-count reader took 12.539 seconds. This measures transfer and
+verification/extraction, not complete SSH startup or a physical NAS.
+
+The dedicated actual two-hop suite passed seven cases in 52.509 seconds on Bash
+5.2 and 50.632 seconds on Bash 4.4.23: account-filtered ghost text, Right Arrow
+without execution, Enter native capture, destination-only Tab completion, real
+native Ctrl-R insert/SESSION Up accept, Unicode cursor/mark cancellation,
+activation/query/Enter in one write, private foreground read/password input,
+subshell session-directory lifetime and graceful cleanup/profile equality.
+Seven independent native prefix tests passed in 0.495 seconds, including native
+deletion, foreign-account isolation, exact Unicode/quotes/trailing spaces and
+bounded oversized-result rejection. Native UUID search plus a read-only exact-row
+lookup preserves text that Atuin's command formatter otherwise trims.
+
+The adapter uses BLE lifecycle hooks instead of competing DEBUG traps. It has a
+narrow source-pinned decoder/unload compatibility shim, with upstream license
+notice, for lossless queued input and main-shell-only cleanup. Subshell unload
+must not delete the parent session's files. A PRECMD hook would alter the pinned
+editor's read-prompt path, so prompt visibility notifications use exec_end and
+initial attachment. Ordinary unload removes the private directory after upstream
+finalization. `exec`, SIGKILL and power loss can leave temporary files. Wider
+custom keymap/profile/application parity remains in STATUS; the original brief's
+full MVP is not established by these focused results alone.
+
+The final installed aggregate passed 177 cases in 236.151 seconds on the modern
+fixture (9 optional/dedicated skips) and 177 cases in 246.467 seconds on the
+actual Bash 4.4.23 fixture (only the dedicated import skip). Original two-hop
+tests explicitly retain GNU Readline; the seven new tests select temporary
+ble.sh. The independent final-image non-root import case passed in 2.716 seconds.
+Final-image offline strace probes observed zero Internet connect/send attempts
+in 17 native and 3 hub-editor cases. This does not separately establish remote
+editor egress behavior or the wider editor/application parity listed in STATUS.
 
 ## Earlier foundation evidence
 

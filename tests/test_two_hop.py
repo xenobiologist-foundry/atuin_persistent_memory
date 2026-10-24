@@ -69,7 +69,8 @@ class TwoHopNativeWidget(unittest.TestCase):
         # selected hostname/prompt or reading bridge-private protocol frames.
         self.client.send("printf '\\n__E2E_HUB_READY__\\n'\n")
         self.client.expect(b"\r\n__E2E_HUB_READY__\r\n", timeout=30)
-        self.client.send("PS1='__E2E_HUB__> '; printf '\\n__E2E_HUB_PROMPT__\\n'\n")
+        self.client.send("PS1='__E2E_HUB__> '; export ATUIN_SSH_REMOTE_AUTOSUGGEST=0; "
+                         "printf '\\n__E2E_HUB_PROMPT__\\n'\n")
         self.client.expect(b"\r\n__E2E_HUB_PROMPT__\r\n")
         self.client.expect(HUB_PROMPT)
         self.enter_destination()

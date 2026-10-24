@@ -145,7 +145,7 @@ async fn run(operation: &str, event: Event, native: &mut NativeState) -> Result<
         check_database(Path::new(&settings.db_path), HISTORY)?;
         check_database(Path::new(&settings.record_store_path), RECORD)?;
         check_database(Path::new(&settings.meta.db_path), META)?;
-        return Ok(json!({"compatible": true, "version": "18.24.1"}));
+        return Ok(json!({"compatible": true, "version": "18.24.1", "history_db_path": settings.db_path}));
     }
     if operation == "discard" {
         check_database(Path::new(&settings.db_path), HISTORY)?;

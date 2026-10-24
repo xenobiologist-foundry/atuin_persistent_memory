@@ -17,6 +17,7 @@ import time
 import tty
 import uuid
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 
 from .atuin import Context, NativeAtuin
@@ -87,10 +88,18 @@ def _write(fd, buffer):
 
 
 class Relay:
-    def __init__(self, argv, *, native=None, outbox=None, connection=None, force_bash=False):
+    def __init__(self, argv, *, native=None, outbox=None, connection=None, force_bash=False, autosuggest=None):
         self.nonce = uuid.uuid4().hex
         self.session = uuid.uuid7().hex
-        self.argv = ["/usr/bin/ssh", *argv, remote_command(self.nonce, self.session, force_bash=force_bash)]
+        self.bundle = None
+        if autosuggest is True or (autosuggest is None and os.environ.get("ATUIN_SSH_REMOTE_AUTOSUGGEST", "1") != "0"):
+            from .blesh import BundleError, load_bundle
+            try:
+                self.bundle = load_bundle()
+            except (OSError, ValueError, BundleError):
+                pass  # A missing/incompatible optional editor keeps GNU Readline.
+        self.argv = ["/usr/bin/ssh", *argv, remote_command(self.nonce, self.session, force_bash=force_bash,
+                                                       bundle=self.bundle)]
         # Force a remote PTY only for eligible shell invocations.
         self.argv.insert(1, "-tt")
         self.native = native or NativeAtuin()
@@ -129,6 +138,14 @@ class Relay:
         self.held_output = bytearray()
         self.held_prompt = bytearray()
         self.prompt_waiting = False
+        self.bundle_waiting = False
+        self.bundle_phase = None
+        self.bundle_lines = None
+        self.suggestion_worker = None
+        self.suggestion_future = None
+        self.suggestion_request = None
+        if autosuggest is True and self.bundle is None:
+            self.notice("temporary editor bundle unavailable; continuing with destination GNU Readline")
         self.metrics = deque(maxlen=256)  # durations only; bounded, never transcripts
 
     def notice(self, text):
@@ -137,7 +154,30 @@ class Relay:
 
     def frame(self, event):
         fields = event.fields
-        if event.kind == "ABORT" and len(fields) == 2 and fields[1] == self.session and fields[0].isdigit():
+        if (event.kind == "BUNDLE_REQUEST" and self.bundle and not self.handshake_seen
+                and fields == (self.session,) and self.bundle_phase is None):
+            self.bundle_waiting = True
+            self.bundle_phase = "fence"
+            self.bundle_deadline = time.monotonic() + 90
+            self.held_input[:0] = self.to_backend
+            self.to_backend.clear()
+            self.to_backend.extend(f"!{self.nonce}:BUNDLE:FENCE\n".encode())
+        elif (event.kind == "BUNDLE_HANDOVER" and self.bundle_phase == "fence"
+              and len(fields) == 2 and fields[0] == self.session):
+            try:
+                if len(fields[1]) > 131072:
+                    raise ValueError
+                pending = bytes.fromhex(fields[1])
+            except ValueError:
+                self.abort_bundle()
+                return
+            self.held_input[:0] = pending
+            self.bundle_phase = "transfer"
+            self.bundle_lines = iter(self.bundle.lines(self.nonce))
+        elif (event.kind == "BUNDLE_ABORT" and self.bundle_waiting
+              and fields == (self.session,)):
+            self.abort_bundle()
+        elif event.kind == "ABORT" and len(fields) == 2 and fields[1] == self.session and fields[0].isdigit():
             req = int(fields[0])
             if req <= self.completed_request or (self.reply_id == fields[0]):
                 return
@@ -163,7 +203,7 @@ class Relay:
             if len(fields) not in {10, 11} or not fields[0].isdigit():
                 return
             req, key, line, point, mark, keymap, host, user, cwd, session = fields[:10]
-            if session != self.session or key not in {"up", "search"}:
+            if session != self.session or key not in {"up", "search", "suggest"}:
                 return
             if int(req) <= self.last_request:
                 return
@@ -176,16 +216,37 @@ class Relay:
             self.state = State.WAIT
             self.to_backend.extend(f"!{self.nonce}:{req}:FENCE\n".encode())
         elif event.kind == "HANDOVER" and self.state == State.WAIT:
-            if len(fields) != 2 or fields[0] != self.request[0]:
+            if len(fields) not in {2, 3} or fields[0] != self.request[0]:
                 return
             # Only the remote callback can assert ownership. It returns all
             # type-ahead preceding the fence in the SSH input byte stream.
-            self.open_widget(fields[1].encode("utf-8", "surrogateescape"))
+            try:
+                pending = (bytes.fromhex(fields[2]) if len(fields) == 3 and fields[1] == "hex"
+                           else fields[1].encode("utf-8", "surrogateescape") if len(fields) == 2 else None)
+                if pending is None or len(pending) > 65536:
+                    raise ValueError
+            except ValueError:
+                self.send_response(fields[0], "cancel")
+                return
+            if self.request[1] == "suggest":
+                self.open_suggestion(pending)
+            else:
+                self.open_widget(pending)
         elif (event.kind == "HELLO" and not self.handshake_seen and len(fields) == 5
               and fields[3] == self.session and fields[4] == "bash"):
+            if self.bundle_waiting and self.bundle_phase not in {"await_hello", "aborting"}:
+                # Releasing input while bundle bytes are in flight could put
+                # those bytes in an editor. Close only our owned SSH instead.
+                self.stopping = True
+                return
             # A pre-existing hook emits DEGRADED before HELLO. Its actual
             # origin still belongs in provenance, without claiming enhancement.
             self.handshake_seen = True
+            if self.bundle_waiting:
+                self.bundle_waiting = False
+                self.bundle_lines = None
+                self.to_backend.extend(self.held_input)
+                self.held_input.clear()
             if self.state == State.BOOTSTRAP:
                 self.state = State.PROMPT
             if self.connection_registry:
@@ -212,6 +273,54 @@ class Relay:
             self.state = State.DEGRADED
             reason = DEGRADED_REASONS.get(fields[0]) if len(fields) == 1 else None
             self.notice(reason or "destination integration degraded; unsupported capture or history keys use ordinary Bash behavior")
+
+    def abort_bundle(self):
+        self.bundle_phase = "aborting"
+        self.bundle_lines = None
+        self.to_backend.clear()
+        self.to_backend.extend((f"!{self.nonce}:BUNDLE:FENCE\n"
+                                f"!{self.nonce}:BUNDLE:END:0:{'0' * 64}\n").encode())
+        self.bundle_deadline = time.monotonic() + 90
+
+    def open_suggestion(self, typeahead):
+        req, _, line, point, _, _, host, user, cwd, session = self.request[:10]
+        self.held_input[:0] = typeahead
+        if self.held_input or not line or len(line.encode("utf-8", "surrogateescape")) > 4096:
+            self.send_response(req, "cancel")
+            return
+        if int(point) != len(line.encode("utf-8", "surrogateescape")):
+            self.send_response(req, "cancel")
+            return
+        if self.suggestion_future is not None and not self.suggestion_future.done():
+            self.send_response(req, "cancel")
+            return
+        workspace = self.request[10] if len(self.request) == 11 else None
+        if self.suggestion_worker is None:
+            self.suggestion_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="atuin-prefix")
+
+        def query():
+            from .context import origin_is_ambiguous
+            root = os.environ.get("ATUIN_SSH_STATE_DIR", "/state/bridge")
+            if origin_is_ambiguous(root, session, host, user):
+                return ""
+            return self.native.suggest(Context(host, user, cwd, session, workspace=workspace), line)
+
+        self.suggestion_future = self.suggestion_worker.submit(query)
+        self.suggestion_request = req
+
+    def poll_suggestion(self):
+        future = self.suggestion_future
+        if future is None or not future.done():
+            return
+        self.suggestion_future = None
+        if (not self.request or self.request[0] != self.suggestion_request
+                or self.request[1] != "suggest" or self.state != State.WAIT):
+            return
+        try:
+            command = future.result() if not self.held_input else ""
+        except Exception:
+            command = ""
+        self.send_response(self.request[0], "insert" if command else "cancel", command)
 
     def outbox_event(self, event):
         try:
@@ -407,6 +516,24 @@ class Relay:
             backend_status = None
             parser_flushed = False
             while not self.stopping:
+                if self.bundle_waiting and time.monotonic() >= self.bundle_deadline:
+                    if self.bundle_phase == "await_hello":
+                        # END may already have returned tty ownership to the
+                        # editor. Never inject a late cancellation command.
+                        self.stopping = True
+                        continue
+                    self.abort_bundle()
+                while self.bundle_lines is not None and len(self.to_backend) < 65536:
+                    try:
+                        line = next(self.bundle_lines)
+                        self.to_backend.extend(line)
+                        if line.startswith(f"!{self.nonce}:BUNDLE:END:".encode()):
+                            self.bundle_lines = None
+                            self.bundle_phase = "await_hello"
+                    except StopIteration:
+                        self.bundle_lines = None
+                        self.bundle_phase = "await_hello"
+                self.poll_suggestion()
                 if self.prompt_waiting:
                     visible = self.outbox.is_visible()
                     if visible or time.monotonic() >= self.prompt_deadline:
@@ -459,8 +586,16 @@ class Relay:
                             else:
                                 self.ui_startup_input.extend(data)
                                 self.route_startup_replies()
-                        elif self.state in {State.WAIT, State.RESTORE}:
+                        elif self.bundle_waiting or self.state in {State.WAIT, State.RESTORE}:
                             self.held_input.extend(data)
+                            if (not self.bundle_waiting and self.state == State.WAIT
+                                    and self.request and self.request[1] == "suggest"
+                                    and self.suggestion_future is not None
+                                    and self.suggestion_request == self.request[0]):
+                                # Typing takes priority over an idle suggestion.
+                                # The native worker may finish in the background,
+                                # but its old request can no longer edit a line.
+                                self.send_response(self.request[0], "cancel")
                         else:
                             self.to_backend.extend(data)
                     elif fd == backend_fd:
@@ -553,3 +688,5 @@ class Relay:
                 signal.signal(sig, handler)
             if self.outbox:
                 self.outbox.close()
+            if self.suggestion_worker:
+                self.suggestion_worker.shutdown(wait=False, cancel_futures=True)

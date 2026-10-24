@@ -23,6 +23,10 @@ keymap,host,user,cwd,session,workspace), HANDOVER(request,typeahead),
 START(command_id,command,host,user,cwd,session,remote_time),
 END(command_id,status,remote_time), PROMPT(cwd), DEGRADED(reason), BYE,
 ABORT(request,session), RELEASE(request,session).
+Temporary editor startup additionally uses BUNDLE_REQUEST(session),
+BUNDLE_HANDOVER(session,pending_hex), BUNDLE_ABORT(session). These share the
+same monotonic sequence with subsequent editor events. A BLE HANDOVER can use
+three fields (request,hex,pending_hex), preserving NUL and arbitrary queued bytes.
 Workspace is the nearest destination ancestor containing `.git`, discovered by
 Bash filesystem tests. It is never inferred from a hub path. REQUEST supports
 at most 256 KiB input; shell typeahead is bounded at 64 KiB.
@@ -37,6 +41,46 @@ them in HANDOVER. The relay feeds those bytes and input held since REQUEST to
 native Atuin on the UI PTY. Search/navigation then has no destination round trip.
 The first handshake necessarily uses the hub-destination link; every UI key
 still traverses the workstation-hub link.
+
+## Temporary destination editor
+
+When the packaged hub selects ble.sh, the destination first creates a private
+session directory, saves tty modes, enters raw/no-echo and emits BUNDLE_REQUEST.
+The relay holds new workstation input, moves unsent input into that held queue,
+and sends `!NONCE:BUNDLE:FENCE\n`. The receiver returns all earlier input as
+pending hex in BUNDLE_HANDOVER. Only then does the hub stream bounded base64 DATA
+lines followed by `!NONCE:BUNDLE:END:SIZE:SHA256\n`. The receiver verifies the
+expected build-time size/hash, extracts the validated regular-file-only archive,
+restores tty modes and loads ble.sh after ordinary login profiles. HELLO from
+the attached editor releases held typeahead. No executable code is delivered as
+Readline input. A premature HELLO closes the owned SSH process rather than
+releasing input over queued bundle data.
+
+Malformed transfers drain through END. A receiver timeout emits BUNDLE_ABORT and
+retains tty ownership until an ordered zero-size/zero-hash abort END or EOF. The
+relay cancels its remaining bundle queue before acknowledging. After a normal
+END has been queued, a startup deadline cannot safely send another protocol line
+into a possibly active editor; it closes only the owned SSH connection instead.
+The archive is bounded at 8 MiB; ordinary DATA lines carry at most 3072 decoded
+bytes. Temporary directories, caches and runtime files are session-owned and
+removed after normal BLE unload. `exec`, SIGKILL or power loss may leave them.
+
+BLE editor widgets use the same fenced REQUEST/RELEASE exchange and the actual
+hub-native TUI. A narrow compatibility shim for the pinned decoder transfers
+its internally buffered raw input to the hub, including activation/query/Enter
+bursts; it does not infer commands from terminal rendering. Command lifecycle
+uses BLE PREEXEC/POSTEXEC hooks instead of competing GNU Readline DEBUG hooks.
+
+REQUEST key `suggest` is an idle prefix lookup, without a TUI. A single bounded
+worker invokes native exact-account prefix search on the hub. Native UUID output
+selects the record; a bounded read-only query of its compatibility-checked native
+history view retrieves exact text because native command formatting trims
+whitespace. No SQL writes or separate suggestion database are used. Initial
+automatic suggestions are single-line, control-free commands up to 64 KiB for
+prefixes up to 4 KiB; native interactive history retains its larger multiline
+contract. New typing cancels an idle reply, stale request IDs cannot edit later
+input, and queued bytes return only after RELEASE. Ordinary typing always takes
+priority over completing a suggestion.
 
 The distinct native TUI writes `READY\n` to a private inherited pipe after its
 first results frame and terminal negotiation. The relay holds recovered and new

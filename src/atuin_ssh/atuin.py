@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import select
 import shutil
+import sqlite3
 import subprocess
 import tempfile
+import time
+from contextlib import closing
 from dataclasses import dataclass
 
 ATUIN_VERSION = "18.24.1"
@@ -62,6 +66,68 @@ class NativeAtuin:
 
     def version(self) -> str:
         return subprocess.check_output([self.binary, "--version"], text=True, timeout=5).strip()
+
+    def suggest(self, context: Context, prefix: str) -> str:
+        """Return one exact-account prefix match, using native search only.
+
+        Called by a bounded background worker while the destination editor owns
+        its fenced reply channel. No search state or command bodies are cached.
+        """
+        if not prefix or len(prefix.encode("utf-8")) > 4096 or any(ord(c) < 32 or ord(c) == 127 for c in prefix):
+            return ""
+        binary = shutil.which("atuin-ssh-search")
+        if not binary:
+            return ""
+        compatibility = self.native("check", {}, timeout=2)
+        database_path = compatibility.get("history_db_path")
+        if not isinstance(database_path, str) or not database_path:
+            return ""
+        environment = context.environment()
+        environment.update(ATUIN_QUERY=prefix, ATUIN_SSH_REMOTE_CONTEXT="1",
+                           ATUIN_SSH_REMOTE_WORKSPACE=context.workspace or "")
+        try:
+            # Native command formatting trims whitespace. Select the native
+            # UUID, then read that exact bounded row from its checked SQLite
+            # view without altering any database or record-store state.
+            with subprocess.Popen([binary, "search", "--format", "{uuid}", "--limit", "1",
+                                   "--search-mode", "prefix", "--filter-mode", "account"],
+                                  env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL) as child:
+                output = bytearray()
+                deadline = time.monotonic() + 2
+                try:
+                    while len(output) <= 128:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0 or not select.select([child.stdout], [], [], remaining)[0]:
+                            return ""
+                        chunk = os.read(child.stdout.fileno(), min(129 - len(output), 128))
+                        if not chunk:
+                            break
+                        output.extend(chunk)
+                    if (len(output) > 128 or not output.endswith(b"\n")
+                            or child.wait(timeout=max(.01, deadline - time.monotonic()))):
+                        return ""
+                finally:
+                    if child.poll() is None:
+                        child.kill()
+                        child.wait()
+            identifier = output[:-1].decode("ascii", "strict")
+            if len(identifier) != 32 or any(c not in "0123456789abcdef" for c in identifier):
+                return ""
+            uri = Path(database_path).resolve().as_uri() + "?mode=ro"
+            with closing(sqlite3.connect(uri, uri=True, timeout=.2)) as database:
+                row = database.execute("SELECT command FROM history WHERE id=? AND hostname=? "
+                                       "AND deleted_at IS NULL AND length(CAST(command AS BLOB))<=65536",
+                                       (identifier, context.host + ":" + context.user)).fetchone()
+            if row is None:
+                return ""
+            command = row[0]
+            if (not command.startswith(prefix) or command == prefix
+                    or any(ord(c) < 32 or ord(c) == 127 for c in command)):
+                return ""
+            return command
+        except (OSError, UnicodeError, sqlite3.Error, subprocess.TimeoutExpired):
+            return ""
 
     def prepare(self, context: Context, query: str = "", *, up: bool = False,
                 keymap: str = "emacs", runtime_dir: str | Path | None = None,

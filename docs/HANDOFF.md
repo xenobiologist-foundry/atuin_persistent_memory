@@ -10,12 +10,13 @@ Python or separately managed WSL distribution was used.
 
 The defining workstation → hub sshd → onward OpenSSH → destination Bash path
 works. Destination Up/Ctrl-R opens the actual hub-local native Atuin TUI and
-returns insert/accept/cancel to the same authoritative remote Readline editor.
-The destination fixture has neither Python nor Atuin and receives only the
-temporary in-memory Bash integration, with no installed project files.
+returns insert/accept/cancel to the authoritative destination editor.
+The destination fixture has neither Python nor Atuin. GNU Readline mode uses
+only in-memory Bash integration. The user's later editor extension also loads
+a private temporary ble.sh tree, with no permanent installation or profile edits.
 
-The compatibility/import correction is committed as `dfcb8c2`. With the added
-inline editor, the final installed modern-image suite passed 150 cases in
+The compatibility/import correction is committed as `dfcb8c2`. With the initial
+hub inline editor, the earlier installed modern-image suite passed 150 cases in
 173.164 seconds with 9 skips (8 optional legacy probes and the dedicated import
 case). The actual GNU Bash 4.4.23 fixture passed 150 cases in 186.773 seconds
 with only the dedicated import skip. The independent non-root SSH import case
@@ -26,20 +27,20 @@ observed any attempted AF_INET/AF_INET6 connect/send operations.
 
 The hub now bundles pinned ble.sh for inline ghost text from native Atuin
 history, with real SSH Right Arrow/Enter/Ctrl-R coverage. See COMPATIBILITY for
-the release, full commit and archive digest. The editor is hub-only; temporary
-destination integration still uses its existing Bash/Readline. Its update hook
+the release, full commit and archive digest. This initial editor addition was
+hub-only. The later user-approved mode described below also loads a temporary
+destination editor. Its update hook
 refuses downloads. `ATUIN_SSH_HUB_AUTOSUGGEST=0` must be set before hub startup
 to disable it. Native HOST scope is unchanged.
 
-The full inline-suggestion regression used runtime image
+That earlier hub-only regression used runtime image
 `sha256:9ddf5ac93a4b40a7e16bf531f880fe636dac7bf9e37ee3a7b4b6a9515ed7674d`.
 Its final modern test image is
 `sha256:7cfa6f68b552d5b4c3d7ec3642f6b50fa775d54e99c2cdc307629524507c0bb2`;
 the corresponding legacy test image is
 `sha256:1a301d963fd9638f84087106d88963d9b1e48f2c14428dd48c4a594f2f3ba2bc`.
 Completed review/autocomplete/legacy fixture containers and networks were
-removed; their named volumes were preserved. Production was inspected afterward
-and remained running its original `sha256:55d6ebd29244accb675611d3ea26aea09d3596f8971236298b4a9cde05f305a8` image.
+removed; their named volumes were preserved. Production was left untouched.
 
 A later user login exposed empty LANG under sshd. Hub initialization now supplies
 `C.UTF-8` only for unset/empty LANG before loading ble.sh; client/profile LANG
@@ -51,11 +52,53 @@ empty LANG, explicit locale preservation and existing native suggestion/search
 behavior. This narrow follow-up did not repeat the full aggregate or recreate
 production. ble.sh's first-use tput cache completion is normal initialization.
 
+The user then explicitly selected temporary destination ble.sh with hub-native
+history after comparing it with a hub-side editor. This is an approved extension
+of the original GNU Readline/functions-only contract. Packaged connections use
+it by default; `--no-autosuggest` retains the earlier mode and
+`ATUIN_SSH_REMOTE_AUTOSUGGEST=0` changes the hub shell's default. An explicit
+`--autosuggest` overrides that setting. Native history and the real search UI
+stay on the hub; completion and command execution stay on the destination.
+The pinned archive is 3,799,040 bytes with SHA256
+`63a0c475827efb41f8156a28b8e057749c28f03fc4cc9b5989e86b204ee945ee`.
+Each connection transfers it over the existing SSH stream into a private temp
+directory, checks its size/hash and loads it after profiles. No remote download
+or system installation is used. Graceful BLE unload removes the session files;
+`exec`, abrupt kill or power loss may leave a private temporary directory.
+
+Existing nonempty PROMPT_COMMAND hooks, an existing editor or incompatible debug
+hooks retain GNU Readline. A startup-read test covers scalar/array prompt hooks.
+Seven dedicated installed two-hop editor tests passed on Bash 5.2 in 52.509 s
+and Bash 4.4.23 in 50.632 s. They cover account-filtered ghost text, Right/Enter,
+destination-only completion, real native insert/accept/cancel, Unicode cursor/
+mark, one-write activation/query/Enter, foreground read/password ownership,
+subshell lifetime and graceful cleanup. Four bundle, seven native prefix and
+six relay tests cover integrity, bounds, exact text and input/generation ownership.
+
+The current installed modern aggregate passed 177 cases in 236.151 s with
+9 skips. The actual Bash 4.4.23 aggregate passed 177 cases in 246.467 s with
+only the dedicated-import skip. Baseline tests explicitly use GNU Readline; the seven new editor
+tests select ble.sh. Independent final-image non-root SSH import passed in
+2.716 s. Final-image offline probes observed zero Internet connect/send attempts
+across 17 native and 3 hub-editor cases; remote-editor egress was not separately
+observed. The final runtime image is
+`sha256:891e014c6748b246a80adfe01f5cfafb115bd02cb06d3e088e7c620b72bda42f`;
+modern test image is
+`sha256:babd4c919a889efc9094013e9ae400c65cc9f7e388891439ec8c80b1a40e67b4`;
+legacy test image is
+`sha256:13ba566ada9c2d3aa9153f57c4884783f5ff6a9f3e2149b9113da66b177b8f2a`.
+These are Docker image inspect IDs (manifest lists on this Desktop backend).
+The modern, legacy and dedicated import containers/networks were removed without
+`-v`; their named volumes were preserved.
+
 The user's running production container was deliberately left on its old image
 while independent projects tested candidate tags. Do not silently recreate it
 or resume the real canceled import. `docker compose up -d --build` applies the
 update and disconnects active SSH sessions. After reconnecting, the user can run
 `atuin-ssh history resume-imports` to continue saved work without another fetch.
+The latest read-only production inspection showed image
+`sha256:9f09de57be475a59df227655d1ba54bcbb5683b6f6ae871ab5b6fea94c713d9c`,
+started 2026-10-23T23:03:56.559215239Z; this iteration did not recreate it.
 
 Docker Desktop is healthy after the user freed space and restarted it. The
 earlier B: full condition is resolved. No unrelated images, caches, files or

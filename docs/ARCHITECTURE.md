@@ -5,8 +5,30 @@ non-root account's login Bash, native Atuin and reversible `ssh` function. For
 eligible interactive calls the installed Python 3.14 package owns a front
 terminal, a backend PTY running `/usr/bin/ssh`, and a temporary UI PTY running
 the native Atuin binary. Python never parses or executes destination commands.
-Destination Bash owns Readline, completion, accepted command representation,
+Destination Bash owns its editor, completion, accepted command representation,
 execution and lifecycle callbacks.
+
+The user selected temporary destination ble.sh on 2026-10-24 after comparing it
+with a hub-side replacement editor. This explicitly extends the original brief's
+GNU Readline/functions-only destination contract: the destination editor is
+ble.sh for that session and its pinned modules/cache/runtime use private
+temporary files. Native Atuin and all durable hub history remain on the hub.
+The retained `--no-autosuggest` mode keeps the original GNU Readline behavior.
+
+The hub validates a fixed, bounded, regular-file-only editor archive and sends
+it over the existing SSH stream. A raw-terminal fence recovers prior typeahead
+before transfer; the relay holds new input until editor startup is acknowledged.
+The destination checks exact size and SHA256 before extraction and sources the
+bundle after ordinary login profiles. It does not fetch software, modify user
+startup files or install system packages. Ordinary exit cleans owned session
+files; hard process loss may leave a private temporary directory.
+
+Destination BLE widgets send authoritative line/cursor/keymap/context snapshots
+through the fenced protocol. Idle prefix requests use a bounded background
+native search on the hub with exact ACCOUNT scope. New typing cancels stale
+suggestions; replies are consumed only while the editor owns its channel.
+Up/Ctrl-R retain the actual hub-native TUI and its insert/accept/cancel results.
+BLE lifecycle hooks capture commands/status/cwd without competing DEBUG traps.
 
 The destination receives Bash functions, variables, hooks and bindings through
 an SSH command and an initialization file descriptor. A real login Bash uses
@@ -14,7 +36,8 @@ POSIX ENV startup to read that descriptor, restores ordinary Bash modes and the
 original exported ENV, closes the private descriptor, then reads `/etc/profile`
 and the first readable user login profile. The payload composes the profiles'
 final PROMPT_COMMAND before its first execution, so the first primary Readline
-prompt is eligible without a warm-up command. No destination file is created.
+prompt is eligible without a warm-up command. The retained GNU Readline mode
+creates no destination project files; the ble.sh mode adds only session files.
 Existing POSIX startup or a readonly ENV falls back to ordinary Bash. Also,
 sshd's command-launching Bash can run `.bashrc`
 noninteractively before the login shell. A profile with noninteractive side

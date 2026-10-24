@@ -3,8 +3,16 @@
 A **workstation** SSHs into the persistent Linux **hub**. Ordinary `ssh target`
 inside the hub starts the real OpenSSH client and temporarily instruments the
 **destination** Bash. Up and Ctrl-R run native Atuin on the hub and return the
-selection to that destination's existing Readline editor. Destination completion,
-editing and execution remain remote. Nothing is installed on the destination.
+selection to that destination's editor. Destination completion, editing and
+execution remain remote. Nothing is permanently installed on the destination.
+
+By default, eligible sessions load the hub's pinned ble.sh bundle into a private
+temporary destination directory for inline Atuin history suggestions. The
+destination does not need Atuin, Python, a package install or Internet downloads.
+Its editor queries native history on the hub using its actual host/account.
+This session editor replaces GNU Readline while keeping editing and completion
+on the destination. Use `atuin-ssh connect --no-autosuggest -- myserver` to retain
+the previous GNU Readline integration without destination project files.
 
 Native Atuin history, records, keys, configuration and bridge recovery metadata
 live in local Docker named volumes. There is no Atuin account, sync server or
@@ -68,6 +76,25 @@ This requires Bash 4.4 or newer; Bash 4.4 also needs the existing `date` utility
 to support `+%s %N`. The account's configured shell and profiles are not changed.
 Ordinary `ssh` preserves unsupported account shells. Starting a nested Bash
 later does not install the session integration.
+
+Inline suggestions are enabled for supported packaged-hub connections. To
+select them explicitly, use `atuin-ssh connect --autosuggest -- myserver` (add
+`--bash` for an account whose configured shell is not compatible Bash). Type a
+history prefix, press Right Arrow to insert the gray suggestion, then Enter to
+execute. Tab completes destination files and commands. Up/Ctrl-R open native
+Atuin on the hub. Set and export `ATUIN_SSH_REMOTE_AUTOSUGGEST=0` in the hub shell
+to keep GNU Readline by default; explicit `--autosuggest` overrides it.
+
+Each enhanced connection transfers about 3.8 MB of pinned editor files from the hub
+over the existing encrypted SSH stream. Existing destination `tar`, `base64 -d`,
+`awk`, `stty` and a supported SHA256 utility are required. Missing prerequisites
+fall back to the ordinary Bash integration. Editor files, caches and runtime
+state stay in a private session directory under the destination's `TMPDIR` or
+`/tmp`; normal logout removes it. Process replacement with `exec` or abrupt
+process loss can leave temporary files.
+No destination profiles are changed. Existing editor/debug hooks or nonempty
+`PROMPT_COMMAND` hooks use GNU Readline mode. This preserves their startup input
+and avoids ble.sh reusing the main prompt inside foreground `read -e`.
 The ordinary `ssh` wrapper forwards the hub's native disabled-binding choices.
 For a direct `atuin-ssh connect` invocation, export
 `ATUIN_SSH_DISABLE_CTRL_R=1` or `ATUIN_SSH_DISABLE_UP=1` to disable those bindings.
@@ -111,8 +138,8 @@ using ble.sh and Atuin's own history source. Type a command prefix, then press
 **Right Arrow** to insert the suggested suffix; **Enter** executes the completed
 line. Up and Ctrl-R still open native Atuin. Suggestions use the current native
 search scope, so the default HOST scope at the hub can hide destination history.
-This editor is loaded only in the hub; onward destinations keep their temporary
-Bash/Readline integration.
+The destination mode uses a separate temporary editor with the destination's
+context; the hub prompt keeps its own context and native history scope.
 
 SSH logins use `LANG=C.UTF-8` when `LANG` is unset or empty, preserving explicit
 client/profile locale settings. A first-use `tput cache ... done` notice from

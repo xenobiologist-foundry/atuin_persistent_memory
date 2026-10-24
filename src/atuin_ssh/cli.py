@@ -47,6 +47,11 @@ def doctor():
         "scope": "ACCOUNT/HOST/SESSION/DIRECTORY/WORKSPACE/GLOBAL" if shutil.which("atuin-ssh-search") else "stock host fallback: exact account scope unavailable",
         "native_helper": bool(shutil.which("atuin-ssh-native")),
         "native_search": bool(shutil.which("atuin-ssh-search")),
+        "destination_editor": {
+            "default": "GNU Readline" if os.environ.get("ATUIN_SSH_REMOTE_AUTOSUGGEST") == "0" else "temporary ble.sh when compatible",
+            "packaged_bundle_present": Path("/usr/share/atuin-ssh/blesh-session.tar").is_file(),
+            "override": "connect --autosuggest or --no-autosuggest",
+        },
         "identity_boundary": "connection aliases/effective endpoints retained separately; isolation of different machines with identical native hostnames is pending",
         "layout": "one local native store; local or LAN ingress selected by Compose bind address",
         "pending": "inspect bridge outbox status; no command text included",
@@ -125,6 +130,12 @@ def main(argv=None):
     connect = sub.add_parser("connect")
     connect.add_argument("--bash", action="store_true",
                          help="use the destination's existing Bash for this session, without changing its login shell")
+    suggestions = connect.add_mutually_exclusive_group()
+    suggestions.add_argument("--autosuggest", dest="autosuggest", action="store_true",
+                             help="use a temporary destination ble.sh editor with hub-native history suggestions")
+    suggestions.add_argument("--no-autosuggest", dest="autosuggest", action="store_false",
+                             help="keep the destination GNU Readline editor without inline suggestions")
+    connect.set_defaults(autosuggest=None)
     connect.add_argument("ssh_args", nargs=argparse.REMAINDER)
     sub.add_parser("doctor")
     history = sub.add_parser("history")
@@ -181,7 +192,8 @@ def main(argv=None):
         except (ImportError, OSError, TypeError):
             pass
         try:
-            return Relay(raw, outbox=outbox, connection=plan, force_bash=args.bash).run()
+            return Relay(raw, outbox=outbox, connection=plan, force_bash=args.bash,
+                         autosuggest=args.autosuggest).run()
         except KeyboardInterrupt:
             return 130
 

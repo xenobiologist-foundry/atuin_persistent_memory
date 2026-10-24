@@ -95,6 +95,12 @@ RUN curl --fail --location --retry 3 \
       "sha256=${BLESH_SHA256}" > /usr/local/share/blesh/SOURCE \
     && rm /tmp/blesh.tar.xz
 
+FROM blesh-bundle AS blesh-session-bundle
+RUN mkdir -p /session-tree && cp -a /usr/local/share/blesh/. /session-tree/
+COPY docker/blesh-package.bash /session-tree/lib/_package.bash
+COPY docker/build-blesh-bundle.py /usr/local/sbin/build-blesh-bundle.py
+RUN python /usr/local/sbin/build-blesh-bundle.py
+
 FROM foundation AS runtime
 ARG HUB_USER=hubuser
 ARG HUB_UID=1000
@@ -104,6 +110,7 @@ COPY --from=native-search-build /out/atuin-ssh-search /usr/local/bin/atuin-ssh-s
 COPY --from=native-source /opt/atuin/LICENSE /usr/share/licenses/atuin/LICENSE
 COPY --from=blesh-bundle /usr/local/share/blesh /usr/local/share/blesh
 COPY docker/blesh-package.bash /usr/local/share/blesh/lib/_package.bash
+COPY --from=blesh-session-bundle /out/blesh-session.tar /out/blesh-session.json /usr/share/atuin-ssh/
 RUN groupadd --gid "${HUB_GID}" "${HUB_USER}" \
     && useradd --uid "${HUB_UID}" --gid "${HUB_GID}" --create-home --shell /bin/bash "${HUB_USER}" \
     && usermod --password '*' "${HUB_USER}" \

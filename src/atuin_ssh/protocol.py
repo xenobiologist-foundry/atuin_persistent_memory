@@ -3,7 +3,8 @@ from dataclasses import dataclass
 import re
 
 MAX_FRAME = 1_048_576
-KINDS = {"HELLO", "REQUEST", "HANDOVER", "START", "END", "PROMPT", "DEGRADED", "BYE", "ABORT", "RELEASE"}
+KINDS = {"HELLO", "REQUEST", "HANDOVER", "START", "END", "PROMPT", "DEGRADED", "BYE", "ABORT", "RELEASE",
+         "BUNDLE_REQUEST", "BUNDLE_HANDOVER", "BUNDLE_ABORT"}
 
 
 @dataclass(frozen=True)

@@ -36,7 +36,8 @@ unset _as_user_prompt
 # exports/imports a function containing another function's pattern expansion.
 printf -v _as_sentinel '\001'
 printf -v _as_newline '\n'
-_as_seq=0 _as_req=0 _as_cmd=0 _as_ready=0 _as_active='' _as_last_status=0
+_as_seq=${_as_boot_seq:-0} _as_req=0 _as_cmd=0 _as_ready=0 _as_active='' _as_last_status=0
+unset _as_boot_seq
 _as_accepted=0 _as_accepted_line='' _as_accept_overflow=0
 _as_histignore_degraded=0
 _as_eligible=0 _as_expected_debug_trap=''
