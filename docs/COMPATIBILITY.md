@@ -1,355 +1,86 @@
-# Compatibility evidence
+# Linux hub compatibility
 
-Updated 2026-10-24. A source observation, a component test, and a working two-hop
-terminal test establish different things. Only the last establishes onward
-native-key integration. See [STATUS.md](STATUS.md) for actual current results.
+Recorded on 2026-10-24; this describes the implemented Linux image, not native
+Mac acceptance. Results and outstanding gates are in [STATUS.md](STATUS.md).
+Exact source/archive pins live in [build-pins.toml](../config/build-pins.toml),
+`Dockerfile`, Cargo.lock and the ble.sh build recipe.
 
-The workstation is a terminal/OpenSSH client. The hub owns the installed native
-Atuin and its local persistent state. The destination owns Bash's authoritative
-editor. GNU Readline remains available with `--no-autosuggest`; the user-selected
-default ble.sh mode temporarily loads the pinned editor and session files on the
-destination. This explicitly extends the original functions-only/Readline
-requirement, selected after comparing it with a hub-side replacement editor.
+## Supported behavior and limits
 
-Automatic enhancement requires a Bash login shell and Bash major version 5 or
-later. A non-Bash account shell is preserved. Explicit
-`atuin-ssh connect --bash -- target` selects the destination's existing Bash
-4.4 or newer for this session; 4.4 additionally requires `date '+%s %N'` with a
-numeric nanosecond component. A subsequently opened nested Bash does not by
-itself activate the bridge. No project installation on the destination is used.
+| Surface | Implemented behavior / boundary |
+| --- | --- |
+| Runtime | Linux/amd64; Python 3.14.2, Bash 5.2.15, OpenSSH 9.2p1, official static-musl Atuin 18.24.1 and separate native compatibility binaries |
+| Automatic remote entry | Configured Bash 5+ login shell; unsupported account shells remain plain |
+| Explicit remote entry | `atuin-ssh connect --bash -- target` selects existing Bash 4.4+; 4.4 needs numeric `date '+%s %N'` |
+| Temporary ble.sh | Default; existing tar, base64 decoding, awk, stty, mktemp and supported SHA256 tools required; receiver checks prerequisites |
+| Editor fallback | Nonempty PROMPT_COMMAND, existing editor/debug hooks or missing bundle prerequisites retain GNU Readline; explicit `--no-autosuggest` supported |
+| Native UI | Insert/accept/cancel, Unicode/cursor/mark, vi/emacs, Up-specific scope, first-prompt and burst input exercised in real PTYs |
+| Search context | ACCOUNT is exact host/account; HOST spans accounts; directory/workspace qualify host/account; GLOBAL removes identity predicates, while native shell filtering still applies |
+| Hostname collisions | Registered endpoint guard holds capture pending/refuses ambiguous ACCOUNT; historical/imported/unregistered overlap remains unresolved |
+| Native state | Upstream APIs and encrypted record machinery; migration/version checks, stable-ID replay, tombstones, privacy and concurrent bridge writers tested; daemon refused |
+| Import | Configured HISTFILE, timestamps, multiline/Unicode, repeated occurrences, dry-run, append/overlap and explicit resume; broader ambiguity/rotation/bounds remain gates |
+| Foreground apps | read/password, cat, jobs, external editor, less/nano/top, resize and output backpressure tested; wider applications/keymaps remain gates |
+| SSH | Aliases, RemoteCommand/explicit commands and status, TCP forwarding, ProxyJump and ControlMaster ownership tested; broader auth/escape combinations remain gates |
+| Nested shells | sudo/su/SSH/container/tmux foreground passthrough; inner capture/context is outside scope |
+| Deployment | Installed image, recreation and stopped-state restore tested; current interactive Windows, native Linux Engine and physical LAN verification remain open |
 
-## Reproduce the probes
+Configured HISTFILE and normal destination Bash history writes remain intact.
+Hooks changed after initialization can disable capture. Incompatible DEBUG or
+functrace is preserved, with enhancement disabled. Startup uses scalar prompt
+hooks through Bash 5.0 and native array execution from 5.1. Readline's vi-insert
+keymap is used. Arbitrary existing preexec/EXIT/Atuin combinations need more evidence.
 
-All Python and Bash execution belongs in Linux containers. From native Windows
-PowerShell or Linux, use:
+## Reproduce
 
-```text
-docker compose -f compose.test.yaml build
-docker compose -f compose.test.yaml up -d --wait hub destination
-docker compose -f compose.test.yaml run --rm client
-docker compose -f compose.test.yaml down
+From the root, run Linux execution in disposable containers:
+
+```sh
+./scripts/hub.sh test
+# Windows PowerShell: ./scripts/hub.ps1 test
 ```
 
-The test project has independent keys and volumes. `down` preserves them. The
-client runs the installed build and exercises real workstation → hub →
-destination OpenSSH PTYs. `tests/test_two_hop.py` verifies insertion with an
-independent Readline snapshot binding, acceptance by observing the selected
-command's output, cancellation by comparing the original buffer/cursor/mark,
-immediate type-ahead, Up, foreground `read`, context and resizing.
+This runs the installed modern PTY/native suite, offline attempted-egress probes
+and independent non-root SSH import. For the actual Bash 4.4.23 fixture:
 
-Native interface probes can run without opening any production state:
-
-```text
-docker run --rm --entrypoint /bin/bash atuin-ssh:local -c 'atuin --version; bash --version; ssh -V; python --version'
-docker run --rm --entrypoint atuin atuin-ssh:local init bash
-docker run --rm --entrypoint atuin atuin-ssh:local search --help
-docker run --rm --entrypoint atuin atuin-ssh:local history start --help
-docker run --rm --entrypoint atuin atuin-ssh:local history end --help
-docker run --rm --entrypoint atuin atuin-ssh:local pty-proxy --help
-```
-
-For manual TUI probes, start an interactive disposable container with an empty
-`ATUIN_HOME`. Native `history start/end` seed its state, `search -i --result-file`
-captures exact result bytes, and `od -An -tx1` exposes the difference between an
-inserted command, an accepted command and cancellation. Stock native search
-returns command text for insertion and prefixes acceptance with
-`__atuin_accept__:`. The distinct compatibility TUI's result protocol 2 adds
-`__atuin_insert__:` for insertion, disambiguating commands that literally begin
-with the acceptance tag. Actual native and two-hop probes cover both actions.
-The exact result-file path avoids command substitution's trailing-newline removal.
-
-## Pinned source findings and implications
-
-The reviewed [v18.24.1 search entry point](https://github.com/atuinsh/atuin/blob/v18.24.1/crates/atuin/src/command/client/search.rs)
-supports `ATUIN_QUERY` and exact `--result-file` output. Author and shell filters
-are passed to the noninteractive branch; they do not provide an exact-account
-restriction for the TUI. [The native TUI](https://github.com/atuinsh/atuin/blob/v18.24.1/crates/atuin/src/command/client/search/interactive.rs)
-owns action/keymap handling and the acceptance prefix.
-
-[Native database context](https://github.com/atuinsh/atuin/blob/v18.24.1/crates/atuin-client/src/database.rs)
-uses the environment session and command origin, obtains cwd, and discovers Git
-from the local filesystem. Native host matching deliberately includes users on
-the same hostname; directory matching does not qualify by host/account. Setting
-a remote `PWD` cannot establish its Git workspace. The bridge must disclose
-stock host scope separately from exact account scope. This project builds a
-distinct pinned `atuin-ssh-search` from the same upstream source, preserving
-its real TUI while adding ACCOUNT and qualified remote directory/workspace
-filtering. Remote Bash supplies workspace metadata; the compatibility binary
-does not discover a same-named hub directory as the remote workspace.
-
-Native history cannot distinguish physical endpoints that report the same
-hostname and account. Connection provenance retains the requested alias and
-effective OpenSSH endpoint separately. If registered endpoints conflict for
-one reported origin, live capture remains `pending_identity` and the remote
-widget refuses a misleading ACCOUNT selection. This is a conservative guard,
-not a machine-mapping solution: old native rows and imported/unregistered
-historical sessions lie outside its evidence and can still overlap in scope.
-`tests/reproduce_duplicate_hostname.py` reproduced the limitation offline with
-fresh native state: both fixture endpoints' commands appeared in one ACCOUNT
-query. The script deliberately calls the native helper directly, bypassing the
-live connection guard. It is a representation probe, not a physical two-host test:
-
-```text
-docker run --rm --network none --entrypoint python atuin-ssh:test tests/reproduce_duplicate_hostname.py
-```
-
-Do not claim separate-machine isolation from aliases alone.
-
-The installed generated Bash integration must be checked after every pinned
-version change. Its modern acceptance mechanism dispatches Readline macros: a
-`bind -x` callback inserts the selected buffer, then a second reserved macro
-conditionally invokes Readline `accept-line`. This permits real Bash parsing
-and execution. The bridge must never `eval` a returned command.
-
-## Capability matrix
-
-| Surface | Required proof | Current boundary |
-| --- | --- | --- |
-| Native insert/accept/cancel | Real TUI and remote Readline snapshot | Automated test implemented; results in STATUS |
-| Hub inline suggestions | Real SSH typing, acceptance and native capture | Pinned ble.sh uses Atuin's native prefix-history source; Right Arrow inserts without execution, Enter executes the complete line, and Ctrl-R still opens native Atuin |
-| Destination inline suggestions | Temporary editor and hub-native history | Default packaged mode loads pinned ble.sh into session-private destination files; exact ACCOUNT prefix lookup stays on the hub. Explicit --no-autosuggest retains GNU Readline. See protocol and STATUS for current evidence |
-| Context overrides | Native search/list output with two hosts/accounts | Actual native context and real two-hop ACCOUNT recall tested; same-hostname distinct-machine mapping remains a gap |
-| Exact account/directory/workspace scopes | Cross-account results and global switching | Distinct pinned native extension tested against account/host/global/directory/workspace data; no schema changes |
-| Native records/privacy/replay | Record-store checks and crash-window faults | Pinned native helper uses upstream APIs with compatibility checks/stable IDs; strict failed-command privacy, replay and native record cases pass the recorded aggregate |
-| Historical import | Timestamp/multiline/occurrence/collision fixtures | Native/ledger probes passed; unknown fields stay explicit; broader ambiguity/rotation/time-bound parity remains incomplete |
-| Startup/hook composition | Plain-vs-enhanced differential sessions | Descriptor startup composes final scalar/array PROMPT_COMMAND after profiles; existing DEBUG/functrace remains intact with enhancement and capture disabled; first-prompt, history defaults and foreground read-e checks are part of the updated suite; EXIT/preexec/existing-Atuin combinations need broader coverage |
-| Experimental pty-proxy | Generated integration + coexistence session | Never enable output retention or recursive proxying; active proxy must bypass safely |
-| OpenSSH invocation modes | Native `ssh -G` plus passthrough tests | Explicit commands, queries, subsystems, non-TTY, background and forwarding-only bypass; six real SSH cases pass aliases, RemoteCommand, command/status, TCP forwarding, ProxyJump and shared ControlMaster ownership |
-| Terminal transport | Arbitrary bytes, frames, output flood, resize, jobs | Every byte value/unrelated OSC/DCS match plain SSH; >3 MiB ordered background output survives buffering; active-UI resize, jobs/external editor, less/nano/top and password/confirmation input pass |
-
-Nested `sudo`, `su`, SSH, container shells and tmux/screen attachment are separate
-instrumentation scopes. They must remain usable as foreground programs. Their
-inner commands/context are not captured by observing their visible prompt.
-
-## Platform evidence and failures
-
-On 2026-10-24, a real destination running Bash 5.2.21 had its bridge handshake
-and native command commits verified; the user confirmed Ctrl-R opened the hub
-history interface. A separate actual destination reported `SHELL=/bin/sh` and
-Bash 4.4.23, with no bridge prompt hook, widget function or DEBUG trap. That
-session took the current unsupported-shell/version plain fallback. These
-observations contain no destination addresses, account names or history bodies.
-They establish those particular compatibility outcomes, not a complete physical
-platform/keymap acceptance run. Check `command -v bash` and `bash --version` for
-the installed Bash before choosing a supported session approach. The explicit
-4.4 compatibility path was implemented after these real-user observations; the
-original physical destination has not yet been retested with the updated image.
-
-The optional legacy fixture builds unmodified GNU Bash 4.4.18 plus official
-patches 019–023 into Bash 4.4.23, with SHA256 pins in
-`docker/bash44-sources.sha256`. It links the installed terminfo library; an
-earlier fixture without ncurses development headers could not resolve the
-terminal's capabilities and produced misleading display failures. The
-destination account remains configured with `/bin/sh`, with no Python or Atuin.
-The test client selects its existing Bash using `connect --bash`.
-
-```text
+```sh
 docker compose -f compose.test.yaml -f compose.legacy-test.yaml build
 docker compose -f compose.test.yaml -f compose.legacy-test.yaml up -d --wait hub destination
 docker compose -f compose.test.yaml -f compose.legacy-test.yaml run --rm client
 docker compose -f compose.test.yaml -f compose.legacy-test.yaml down
 ```
 
-The descriptor bootstrap restores normal Bash history defaults before profiles;
-temporary POSIX initialization must not leave `HISTFILE=~/.sh_history`. Focused
-plain/enhanced comparisons cover default, exported custom and exported empty
-HISTFILE, shell modes, Readline variables, exported ENV and inherited
-inherit_errexit. Existing POSIX startup and unavailable descriptor/readonly ENV
-cases use a fixed diagnostic and ordinary Bash. The first primary prompt and a
-profile's foreground `read -e` have separate ownership tests. Scalar prompt hooks
-are used through Bash 5.0; native array execution begins in 5.1. Private callback
-sequences are distinct per keymap because old Bash shares their callback lookup.
+Fixture projects have separate keys/volumes; `down` keeps volumes. Legacy Bash
+is GNU 4.4.18 plus official patches 019–023, with pins in
+`docker/bash44-sources.sha256`. Its account uses `/bin/sh`, no Python or Atuin;
+the client explicitly selects Bash. Tests must never mount personal history.
 
-## Import progress and interruption
+Useful native probes in a disposable image:
 
-Imports report count-only progress on stderr and their final JSON report on
-stdout. The SSH reader allocates a PTY for interactive login Bash, then resets
-raw mode after profiles so newline translation cannot alter history bytes. Its
-tests cover custom HISTFILE, exact bytes, unchanged source and interruption.
-
-The native helper shares setup and connection pools in bounded batches while
-retaining compatibility, privacy, uniqueness and native-record checks. The
-metadata-only [benchmark](../artifacts/import-performance.json) measured 200
-synthetic entries at 7.9936 seconds with individual helpers and 0.4599 seconds
-with batches on this host; SSH transfer and ledger alignment are excluded.
-Uncertain writes retain individual native-record reconciliation deadlines.
-
-A public-CLI fault test commits three native records, interrupts before the
-batch reply, and explicitly resumes 64 uncertain plus six pending entries into
-exactly the original 70 IDs and 70 encrypted records, with native verification.
-No canceled production import is automatically restarted. Reimport matching
-currently depends on the literal SSH target, host/account/HISTFILE and aligned
-accepted snapshot; alias changes, changed filters/time bounds and ambiguous
-untimestamped rotations remain limitations rather than an exactly-once promise.
-
-## Hub inline suggestions
-
-The image bundles the official ble.sh release `ble-nightly-20260908+d81fd54`,
-commit `d81fd54feb0d996fdff20dca27eaf0201f7015cc`, with archive SHA256
-`7a2445f138e7f099dd5dee749391a8b045646d1b8a605975885be5b34b6b5f7e`.
-The full prebuilt bundle and license are installed under `/usr/local/share/blesh`.
-The archive is fetched and verified during image construction. Its package
-update hook refuses interactive downloads and directs users to rebuild the image.
-
-Hub startup follows [Atuin's documented Bash integration order](https://github.com/atuinsh/atuin/blob/main/docs/docs/integrations.md),
-verified against the installed 18.24.1 integration:
-load ble.sh without attaching, initialize native Atuin, install the onward SSH
-wrapper, then attach ble.sh. Atuin registers its own `atuin-history` suggestion
-source, which performs local prefix searches. Existing native scope and privacy
-settings apply; no separate suggestion database or remote service is introduced.
-Set `ATUIN_SSH_HUB_AUTOSUGGEST=0` before the hub startup source line to opt out.
-
-sshd does not inherit the image's locale environment. Hub initialization now
-exports `LANG=C.UTF-8` if LANG is unset or empty before loading ble.sh, preserving
-nonempty LANG and all explicit LC_* settings. Four installed-image real SSH
-checks passed in 7.226 seconds: absent/empty LANG without the suspicious-environment
-warning, explicit locale preservation, ghost-text acceptance/execution and native
-Ctrl-R/cancel. The normal first-use `tput cache ... done` message reports successful
-terminal cache generation.
-
-Two actual SSH tests verify visible ghost text, Right Arrow insertion without
-execution, Enter execution of the entire suggestion, and native Ctrl-R/cancel
-without accidental execution. Three Linux-PTY offline strace cases cover editor
-startup, a real history suggestion, and refused `ble-update`; all observed zero
-AF_INET/AF_INET6 connect/send attempts. The native helper's separate 17-case
-offline observation also passes with the bundled editor image. Normal intentional
-SSH/curl/Git networking remains available.
-
-The additional editor exposed test-harness timing assumptions: a large pasted
-ProxyCommand must finish reaching the actual destination prompt before sending
-an origin probe. Tests now wait for that known fixture prompt. After native Tab
-selection they wait for a generated prompt, avoiding a false match on a command
-shown among Atuin results. Focused real two-hop 50/150/300 ms RTT scenarios pass
-with both Bash 5.2 and Bash 4.4 destinations.
-
-The final installed-image aggregate passed 150 cases in 173.164 seconds on the
-modern fixture (9 optional/dedicated skips) and 150 cases in 186.773 seconds on
-the actual Bash 4.4.23 fixture (only the dedicated import skip). The separate
-non-root SSH import CLI case passed in 2.665 seconds against the corrected import
-code. The fixture database checks use read-only SQL as the hub's database owner,
-so SQLite can maintain its live WAL auxiliary files; an immutable read-only view
-would incorrectly hide committed WAL data. Completed fixture containers/networks
-were removed with their named volumes preserved.
-
-## Temporary destination ble.sh
-
-The user selected destination editing with hub-native history on 2026-10-24.
-Eligible packaged connections now load the same pinned ble.sh version into a
-private destination session directory. `--no-autosuggest` retains GNU Readline;
-`ATUIN_SSH_REMOTE_AUTOSUGGEST=0` changes the default, and explicit `--autosuggest`
-overrides it. A nonempty user PROMPT_COMMAND, existing editor/debug hooks or
-unsupported prerequisites fall back before editor initialization. An actual
-startup read test verifies scalar/array prompt hooks keep their own input without
-requesting a bundle; this prevents a first-attach input deadlock and the pinned
-editor's main-prompt reuse in nested reads.
-
-The deterministic USTAR archive is 3,799,040 bytes, SHA256
-`63a0c475827efb41f8156a28b8e057749c28f03fc4cc9b5989e86b204ee945ee`.
-It contains only validated regular files/directories, including the license and
-disabled updater hook. Existing tar/base64/awk/stty and a supported SHA256 tool
-are used; no destination Python, Atuin or Internet downloads are needed. Four
-bundle/PTY tests cover unsafe archive entries, digest/size bounds, binary queued
-input, extraction/cleanup and cancellation ownership on Bash 5.2/4.4. An actual
-full-archive local PTY observation took 3.522 seconds with buffered line reads;
-the initial fixed-count reader took 12.539 seconds. This measures transfer and
-verification/extraction, not complete SSH startup or a physical NAS.
-
-The dedicated actual two-hop suite passed seven cases in 52.509 seconds on Bash
-5.2 and 50.632 seconds on Bash 4.4.23: account-filtered ghost text, Right Arrow
-without execution, Enter native capture, destination-only Tab completion, real
-native Ctrl-R insert/SESSION Up accept, Unicode cursor/mark cancellation,
-activation/query/Enter in one write, private foreground read/password input,
-subshell session-directory lifetime and graceful cleanup/profile equality.
-Seven independent native prefix tests passed in 0.495 seconds, including native
-deletion, foreign-account isolation, exact Unicode/quotes/trailing spaces and
-bounded oversized-result rejection. Native UUID search plus a read-only exact-row
-lookup preserves text that Atuin's command formatter otherwise trims.
-
-The adapter uses BLE lifecycle hooks instead of competing DEBUG traps. It has a
-narrow source-pinned decoder/unload compatibility shim, with upstream license
-notice, for lossless queued input and main-shell-only cleanup. Subshell unload
-must not delete the parent session's files. A PRECMD hook would alter the pinned
-editor's read-prompt path, so prompt visibility notifications use exec_end and
-initial attachment. Ordinary unload removes the private directory after upstream
-finalization. `exec`, SIGKILL and power loss can leave temporary files. Wider
-custom keymap/profile/application parity remains in STATUS; the original brief's
-full MVP is not established by these focused results alone.
-
-The final installed aggregate passed 177 cases in 236.151 seconds on the modern
-fixture (9 optional/dedicated skips) and 177 cases in 246.467 seconds on the
-actual Bash 4.4.23 fixture (only the dedicated import skip). Original two-hop
-tests explicitly retain GNU Readline; the seven new tests select temporary
-ble.sh. The independent final-image non-root import case passed in 2.716 seconds.
-Final-image offline strace probes observed zero Internet connect/send attempts
-in 17 native and 3 hub-editor cases. This does not separately establish remote
-editor egress behavior or the wider editor/application parity listed in STATUS.
-
-## Earlier foundation evidence
-
-The first foundation image used Python 3.14.2 on Debian 12, Bash 5.2.15,
-OpenSSH 9.2p1 Debian-2+deb12u10 and OpenSSL 3.0.22. Its GNU Atuin binary refused to
-run because GLIBC_2.38 and GLIBC_2.39 were unavailable. This was a real failed
-probe and prompted a static-musl asset correction. The corrected native binary
-reports `atuin 18.24.1 (c58d2e993d05be423315f6ae3739e9ab3e45eea5)` and its real
-TUI passed the initial eight-case two-hop suite. Native help and the generated
-Bash macro-chain implementation were inspected in that image.
-Docker storage exhaustion temporarily interrupted development. After recovery,
-installed-image tests exercised ABORT/RELEASE recovery, native record/scoping
-extensions and a READY descriptor after the first complete native UI frame.
-The latter fixed loss of Enter/navigation keys sent with activation. Earlier
-status/history-expansion/privacy corrections passed an earlier installed-image
-aggregate: 109 cases in 174.546 s, OK with one dedicated-import skip; that case
-passed separately in 3.065 s. All 28 two-hop, 9 terminal and 6 actual SSH
-compatibility cases passed. That image's 14-case offline privacy probe observed
-zero attempted Internet requests. See STATUS for the newer compatibility/import
-and inline-suggestion regression results.
-
-Actual Bash 5.2 rejects `bind -m vi-insertion` as an invalid keymap. Native Atuin
-uses `vi-insert`. The expanded PTY suite caught this independently: vi-command
-slash worked while vi-insert Ctrl-R fell back to ordinary reverse search. A
-source correction to `vi-insert` has passed real two-hop vi insert/command tests.
-
-The effective pinned `ATUIN_HOME=/state/atuin` stores native state below `data/`:
-`history.db`, `records.db`, `meta.db`, the local storage key, and live WAL/SHM
-files. Configuration is `/state/atuin/config.toml`. Preserve the complete root
-for backup, quiescing every writer first.
-
-## Measured initial latency
-
-Run the reproducible metadata-only benchmark in the disposable test client:
-
-```text
-docker compose -f compose.test.yaml run --rm client python tests/benchmark_pty.py --samples 20
+```sh
+docker run --rm --entrypoint atuin atuin-ssh:local init bash
+docker run --rm --entrypoint atuin atuin-ssh:local search --help
+docker run --rm --entrypoint python atuin-ssh:test tests/reproduce_duplicate_hostname.py
 ```
 
-The 2026-10-23 run used 20 samples and 994 native records on an Intel i7-14700K,
-linux/amd64 Docker Desktop kernel 6.6.87.2, Python 3.14.2 and native Atuin 18.24.1.
-Ctrl-R→native header p50/p95/p99 was 21.98/27.21/29.49 ms. Tab→remote shell redraw
-plus independent Readline snapshot was 6.64/8.25/9.20 ms. The unique query was
-already typed in authoritative remote Readline. These wall-clock measurements
-include workstation/hub transport, the destination ownership roundtrip, native
-UI work and the test client. They do not isolate relay overhead, establish
-query/navigation response time or prove the 10k/100k/1m targets. No artificial
-RTT was configured for this baseline.
+The duplicate-hostname probe bypasses the live guard and demonstrates native
+representation overlap using synthetic data; it is not a physical two-host test.
+For manual UI probes, use fresh ATUIN_HOME and exact result files, avoiding shell
+substitution that strips trailing newlines. Private result protocol 2 tags both
+insert and accept; commands beginning with literal tags retain their meaning.
 
-`tests/latency_proxy.py` supplies an unprivileged, bounded OpenSSH ProxyCommand
-fixture for 50/150/300 ms added destination RTT. It delays encrypted stream chunks
-in both directions. This is distinct from complete packet/congestion emulation,
-and does not affect the workstation→hub link. Completed evidence is tracked in
-STATUS; writing the fixture alone does not pass the latency acceptance gate.
-The actual 50/150/300 ms scenarios passed, as did resizing during active native
-UI followed by exact insertion and a remote terminal-size check. See
-[BENCHMARKS.md](BENCHMARKS.md) for separate native 10k/100k/1m and real two-hop
-raw-byte relay differential measurements and their limits.
+## Relevant native source decisions
 
-Actual native Windows Terminal/OpenSSH, a second LAN workstation and native Linux
-Docker Engine require separate recorded runs. The image targets linux/amd64;
-arm64 is outside this delivery scope. A Linux
-container test launched from PowerShell does not prove all of those surfaces.
-Native Windows OpenSSH 9.5p2 did complete a noninteractive strict-host-key-checked
-published-port hub → destination command. The installed native-extension image
-was recreated without losing native/SSH identity or home state. Its stopped-hub
-PowerShell backup restored into fresh volumes: 22 regular files matched byte
-content, ownership and modes, and non-root native search/store verification
-passed. These results do not establish interactive Windows Terminal or native
-Linux Engine behavior.
+Pinned Atuin 18.24.1's interactive search does not apply the noninteractive
+author/shell CLI filters. Set `search.shells` in config for the TUI. Its HOST
+scope spans users, directory scope is path-only, and Git discovery is local.
+These differences require the separate native ACCOUNT/path/workspace extension.
+Stock official Atuin remains available and its database schema stays unchanged.
+
+ble.sh is pinned to `ble-nightly-20260908+d81fd54`; its disabled-updater bundle
+is 3,799,040 bytes, SHA256
+`63a0c475827efb41f8156a28b8e057749c28f03fc4cc9b5989e86b204ee945ee`.
+Normal unload cleans owned files; exec/SIGKILL/power loss may leave them. Separate
+remote-editor egress observation and broader editor parity remain open.
+
+Measurements and their methodology are in [BENCHMARKS.md](BENCHMARKS.md);
+operator configuration and recovery are in [OPERATIONS.md](OPERATIONS.md).

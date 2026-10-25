@@ -110,10 +110,9 @@ The relay holds front input until that acknowledgement. On a missing fence the
 callback repeatedly requests ABORT while retaining tty ownership; the relay
 sends one cancel response for that request and ignores stale repeated aborts
 after RELEASE. No callback timeout returns to an ordinary shell while a late
-result can still be in flight. A real corrupted-REQUEST test exercises the
-30-second ABORT path and verifies the original editor survives without executing
-queued type-ahead. Killing the native UI also restores the remote editor and
-terminal modes. Broader severe interleaving remains a hardening gate.
+result can still be in flight. Native UI failure returns cancel and restores
+the remote editor and terminal modes. Broader severe interleaving remains a
+hardening gate tracked in STATUS.md.
 
 Timeouts: callback fence 30s, relay handover 35s. UI interaction has no idle
 timeout: the callback keeps ownership until matching DONE or terminal EOF so a

@@ -1,73 +1,66 @@
-# Delivery status
+# Linux hub status and TODO
 
-Updated 2026-10-24. This checklist records evidence, not intended capabilities.
-The defining native-key two-hop interaction works in the installed container.
-The brief's complete MVP remains incomplete while the parity and deployment
-gates below remain open.
+Evidence recorded 2026-10-24. The installed workstation → hub → destination
+interaction works. Full acceptance remains incomplete at the gates below.
+Documentation cleanup does not constitute a new runtime acceptance run.
 
-| Delivery item | State | Evidence or next concrete action |
-| --- | --- | --- |
-| Authoritative brief and repository inspection | Complete | Empty repository plus brief inspected; implementation started in place |
-| Linux Python execution from PowerShell | Passed | Final installed-image suite ran Python 3.14.2/Bash/OpenSSH in Linux containers from native PowerShell; no Windows Python or separately managed WSL distribution required |
-| Foundation image | Passed installed image gate | Checksum-pinned static musl Atuin 18.24.1, Python 3.14.2, Bash 5.2.15 and OpenSSH 9.2p1 on Debian 12; installed package works without checkout; pinned ble.sh supports hub suggestions and a validated temporary destination bundle |
-| SSH invocation classification | Passed component gate | Original argv preserved; special forms bypass; actual OpenSSH `-G` custom config tests pass |
-| Actual SSH compatibility | Six installed-image cases passed | Real aliases, configured RemoteCommand, explicit command and status, TCP forwarding, ProxyJump and shared ControlMaster ownership passed in 10.335 s; further authentication and escape coverage remains |
-| Framed protocol | Passed component gate | Fragmentation, unrelated escape sequences, malformed/stale/truncated/oversized data, response chunking, ABORT/RELEASE recovery and actual terminal-query handling exercised in the aggregate suite |
-| Real native Atuin two-hop interaction | Defining interaction demonstrated | Real workstation SSH → installed hub → Python-free destination Bash; native ACCOUNT UI, Tab insert, Enter accept, Escape cancellation, Unicode cursor/mark preservation, vi insert/command and native Up-specific scope |
-| Actual destination shell compatibility | Automated modern/legacy gates passed; physical legacy retest pending | Bash 5.2.21 destination handshake/native capture verified and Ctrl-R confirmed by user. The original `/bin/sh` account with Bash 4.4.23 stayed plain; explicit `connect --bash` now selects existing Bash 4.4+ for one session and passes the actual 4.4.23 `/bin/sh`-account fixture. GNU Readline mode creates no project files; the user-approved ble.sh mode uses private temporary session files |
-| Hub inline suggestions | Real SSH and full regression gates passed | Pinned ble.sh and native Atuin history source; visible ghost text, Right Arrow insertion without execution, Enter complete-command execution, native Ctrl-R/cancel pass. Default native scope is preserved; no destination editor installation |
-| Hub locale follow-up | Passed focused installed-image SSH checks | Default LANG=C.UTF-8 before ble.sh when unset/empty; explicit LANG/LC_* preserved. Four actual SSH tests passed in 7.226 s, including native suggestions and Ctrl-R/cancel. Normal first-use tput cache generation retained |
-| Temporary destination inline suggestions | User-approved editor extension; focused modern/legacy gates passed | Destination ble.sh performs editing/completion/execution while the hub supplies native ACCOUNT prefix search and real Atuin TUI. Seven actual two-hop cases passed on Bash 5.2 (52.509 s) and 4.4.23 (50.632 s): ghost/Right/Enter, account isolation, remote Tab, native insert/accept/cancel, Unicode cursor/mark, one-write activation/type-ahead, foreground read/password ownership and graceful temp cleanup. Wider editor parity remains open |
-| Destination bundle and fallback | Passed component/PTY gates | Validated deterministic 3,799,040-byte archive; four bundle tests cover unsafe entries, integrity/bounds, binary held input, abort ownership and cleanup. Six relay tests cover generation/input ownership. Existing nonempty PROMPT_COMMAND/editor/debug hooks retain GNU Readline; one scalar/array startup-read test verifies fallback without a bundle request. `--no-autosuggest` explicitly retains GNU Readline |
-| Native suggestion text/privacy | Seven native tests passed | Native exact-account UUID search plus a bounded read-only exact-row lookup preserves Unicode/quotes/trailing spaces; no SQL writes or separate store. Deleted/foreign-account/control/multiline/oversized results are refused; worker output and runtime are bounded |
-| Startup ownership/type-ahead | Passed focused real PTY gates | Native READY descriptor after negotiation/first query/first frame prevents early input loss; Ctrl-R + query + Enter and Ctrl-R + query + Up + Tab in one write pass, including selection of an older matching command |
-| Editing, output and jobs | Passed installed-image PTY gates | Exact >16 KiB Unicode/quotes/tabs/trailing-newline selection; plain-OpenSSH differential for every byte value and unrelated OSC/DCS; 40,000 ordered background lines (>3 MiB) survive bounded buffering; Ctrl-Z/fg/Ctrl-C/cat EOF, external editor, nested Bash, less/nano/top and password/confirmation input; active-UI resize preserves selection and reaches remote stty |
-| Delayed destination type-ahead | Passed 50/150/300 ms scenarios | Unprivileged bounded hub-side ProxyCommand adds half the stated RTT in each encrypted-stream direction; immediate Ctrl-R/query reaches the widget and selection returns to the same remote editor; no workstation/hub delay injected |
-| Remote account/directory/workspace search scopes | Native extension exercised | Distinct pinned `atuin-ssh-search` retains upstream TUI, adds exact ACCOUNT and qualified directory/workspace scopes; actual native tests distinguish host/account/global/path/workspace; no schema changes |
-| Command capture and native records | Passed installed-image aggregate gate | Fifteen real two-hop lifecycle cases cover pipelines/functions/loops/substitution, shell status, repeated commands, cancellation, background launch, cwd, aliases/provenance, interactive read, HISTIGNORE/leading space, heredoc, history expansion and unknown exit/exec completion |
-| Concurrent workstation sharing | Passed actual two-session gate | Two simultaneous workstation → hub → destination sessions immediately share ACCOUNT history through the hub's native store after prompt visibility/barrier fixes |
-| Import/provenance/collisions | Native/component and actual SSH probes passed; remaining parity listed below | Bounded raw-PTY Bash reader, timestamped multiline parsing, occurrence ledger, count-only progress, dry-run, bounded native batches, SIGINT/explicit-resume stable-ID verification and serialized coordinators; broader rotation/time-bound/ambiguity coverage remains incomplete |
-| Runtime no-account/no-external-traffic observation | Passed 20 offline observations | `strace` under `--network none` detected zero attempted Internet requests: 17 stock/native startup, capture, search, batch/import/check and real TUI cases plus 3 actual ble.sh startup/suggestion/refused-update cases |
-| Persistence and backup/restore | Passed installed-image operations gate | Forced recreation preserved native record/local key/sshd key/home fingerprints; PowerShell stopped-hub backup and fresh-volume restore compared 22 regular files byte-for-byte with uid/gid/modes; non-root native search and store verification passed; source stopped before activating restored writer |
-| Windows OpenSSH | Earlier noninteractive published-port hop passed; current-image/manual gate | Native Windows OpenSSH 9.5p2/LibreSSL 3.8.2 → published localhost hub → destination printed `WINDOWS_NATIVE_TWO_HOP_FINAL_OK` with strict trusted host keys. Repeating it for the inline-suggestion image was not run: automatic approval review rejected exporting its disposable private fixture key onto Windows. Actual Windows Terminal interactive keys remain unverified |
-| Native Linux Docker Engine smoke | Manual gate | Same image/Compose, SSH, persistence, networking and restore |
-| Second LAN workstation / firewall boundary | Manual gate | Authorized second-machine connection and outside-boundary rejection |
-| Small-history two-hop latency | Measured installed protocol-2 image | 20 samples, 994 records, i7-14700K, amd64: key→native header p50/p95/p99 = 21.98/27.21/29.49 ms; Tab→Readline snapshot = 6.64/8.25/9.20 ms; includes both transports/test client |
-| Native 10k/100k/1m performance | Measured independently of SSH/relay | 20 samples/action/size; exact first-results READY and verified query/navigation selections; native first-results p95 about 10–14 ms; single-query-key plus Tab/exit p95 7.38/23.09/213.49 ms; warm OS cache; see COMPATIBILITY and raw report |
-| Relay overhead comparison | Measured real two-hop differential | 1,000 exact 32-byte raw-cat echoes per path, after 20 warmups: plain/enhanced round-trip p95 0.689/0.889 ms; difference about 0.20 ms supports local 5 ms target, but does not isolate one-way relay latency |
-| Remaining performance gates | Unverified | Full two-hop scaling, true cold-disk behavior and separate workstation/hub latency; native 1M query cost is a measured scaling limit |
-| Docker Desktop test engine | Recovered | Host B: exhaustion interrupted an earlier build; space was freed and Docker restarted, followed by successful installed-image builds/tests; no production resources were deleted by this project |
-| Compatibility/import regression | Passed installed modern and legacy images | Modern: 148 cases in 138.054 s, OK with 9 skips (8 optional legacy probes and dedicated import). Bash 4.4.23 fixture: 148 cases in 148.495 s, OK with only the dedicated-import skip. Independent non-root SSH import CLI case passed in 2.665 s. No production history was used |
-| Last full aggregate before locale follow-up | Passed installed modern and legacy images | Modern: 150 cases in 173.164 s, OK with 9 skips. Bash 4.4.23 fixture: 150 cases in 186.773 s, OK with only the dedicated-import skip. Includes real hub ghost-text/acceptance/cancel and complete onward SSH regression. Known fixture prompt/WAL access races corrected; no runtime workaround or skipped failure |
-| Current temporary-editor aggregate | Passed installed modern and legacy images | Modern: 177 cases in 236.151 s, OK with 9 skips (8 optional legacy probes and dedicated import). Bash 4.4.23 fixture: 177 cases in 246.467 s, OK with only the dedicated-import skip. The independent final-image non-root SSH import case passed in 2.716 s. Baseline two-hop tests explicitly retain GNU Readline; seven new two-hop tests exercise temporary ble.sh. Test counts do not imply complete ble.sh parity |
-| Native import throughput | Measured 200-entry fixture | Individual helper calls 7.9936 s; bounded batches 0.4599 s on this host, with native row/record verification. SSH and ledger alignment excluded; uncertain writes still reconcile individually |
+## Verified feature set
 
-Next action: implement explicit machine mapping, broaden startup/hook and storage
-compatibility, and complete the physical-platform/LAN/manual parity gates before
-claiming full MVP.
+- Persistent non-root Bash hub with native Atuin, hub inline suggestions and
+  local named-volume storage; installed runtime works without the checkout.
+- Real onward OpenSSH, destination-authoritative editing, native Up/Ctrl-R,
+  insert/accept/cancel, Unicode/cursor/mark, vi/emacs and burst-input ownership.
+- Temporary destination ble.sh with exact-account suggestions, remote completion,
+  foreground read/password isolation and normal cleanup; GNU Readline fallback.
+- Bash 5.2 and explicit Bash 4.4.23 on a `/bin/sh` account; no destination Python
+  or Atuin. Native host/account/session/path/workspace/global scopes.
+- Capture lifecycle, immediate concurrent-session visibility, native records,
+  privacy-before-payload, stable replay, tombstones and pending collision handling.
+- Configured-HISTFILE import, repeated occurrences, multiline/timestamps,
+  bounded native batches, interruption and explicit stable-ID resume.
+- Byte-preserving relay, >3 MiB background-output backpressure, active-UI resize,
+  jobs, less/nano/top, external editor, forwarding/ProxyJump/ControlMaster cases.
+- Recreation retains native/SSH identity and home. Stopped-hub backup restored
+  22 files with matching bytes/ownership/modes and native record verification.
 
-## Remaining parity gates
+## Recorded acceptance
 
-Every unverified item below blocks claiming the brief's complete MVP. These are
-not established failures unless explicitly identified as a known gap.
-
-| Area | Remaining evidence or known gap |
+| Run | Result |
 | --- | --- |
-| Final native key contract | Explicit insert-result tagging, activation bursts, literal action-prefix commands, active-UI resize and strict privacy cases pass the final aggregate; full custom keymap coverage remains |
-| Startup/hook parity | Descriptor bootstrap composes the final scalar/array PROMPT_COMMAND before its first execution; profile replacement no longer suppresses installation. Temporary ble.sh requires empty prompt hooks; custom hooks retain GNU Readline. POSIX/readonly ENV/unavailable descriptor cases stay plain; incompatible DEBUG/functrace disables enhancement and capture. EXIT/preexec/existing-Atuin combinations need broader evidence |
-| Shell editing and applications | Existing tests cover multiline selection, >16 KiB bounds, external editor, cat/read, Ctrl-C/Z/D, fg, heredocs, history expansion, less/nano/top and password/confirmation; Vim, further REPLs and OpenSSH suspension/escapes need additional evidence |
-| Native SSH compatibility | Six real cases pass aliases, configured RemoteCommand, explicit command/status, TCP forwarding, ProxyJump and shared ControlMaster ownership. Combined flags and further proxy/forwarding combinations, password/keyboard-interactive/agent/cert authentication and escape behavior remain |
-| Output and recovery | Byte differential, >3 MiB backpressure and terminal queries pass; continue broader malformed/interleaved-frame, stale-generation, worker/relay failure and both-transport disconnect faults |
-| Capture lifecycle | Fifteen lifecycle cases pass the recorded aggregate, including status, expanded history and unknown exit/exec completion; broader interrupt/disconnect and history-policy combinations remain. Complex HISTIGNORE patterns conservatively fall back for duplicate capture; they must not bypass privacy |
-| Context and native scopes | Exact native scopes pass fixture probes. Conflicting registered endpoints for one reported origin cause pending live capture and refused ACCOUNT selection. Direct-native reproduction confirms the representation gap; imported/unregistered history and preexisting rows remain outside the guard and can overlap. A mapping solution is required |
-| Storage and privacy | Stable-ID crash-window replay, deletion/tombstones, native uniqueness collisions, concurrent writers and privacy-before-durable-payload cases pass; broader concurrent deletion, DB busy/read-only/full/corruption and daemon capability remain |
-| Imports | Native/ledger probes and actual SSH CLI custom-HISTFILE append/rotation/read-only recovery pass; broader truncation/overlap, ambiguity, time bounds, large imports and interrupted resumability remain |
-| Central sharing | Containerized concurrent-workstation immediate visibility passes; physical second-workstation/LAN firewall boundaries remain manual; independent hubs remain separate, with no cloned concurrent writer identities |
-| Deployment and privacy | Installed image, GNU Readline no-file inventory, temporary ble.sh graceful cleanup, recreation/restore and bounded offline attempted-egress tests pass. `exec`, SIGKILL or power loss can leave private temp files; deliberate LAN DNS/HTTPS/VPN diagnostics and remote-editor egress observation remain |
-| Actual host/LAN/platform tests | Interactive Windows Terminal keys, native Linux Engine image/network/persistence/restore, second authorized LAN workstation and boundary rejection, LAN IP/DNS and VPN diagnostics |
-| Performance | Native 10k/100k/1m, small-history two-hop and real relay differential measured; 50/150/300 ms destination-delay correctness passes; true cold-cache, full two-hop scaling and independent workstation/hub delay remain unverified |
+| Installed modern aggregate | 177 cases, 236.151 s; 168 passed, 9 optional/dedicated skips |
+| Installed actual Bash 4.4.23 aggregate | 177 cases, 246.467 s; 176 passed, 1 dedicated-import skip |
+| Independent non-root SSH import CLI | Passed, 2.716 s |
+| Dedicated temporary-editor two-hop suite | 7 passed on each Bash 5.2 and 4.4.23 fixture |
+| Offline attempted-egress observation | 17 native + 3 hub-editor cases; zero observed Internet connect/send attempts; remote editor not separately observed |
 
-Nested inner shells deliberately remain usable pass-through scopes, with no
-claimed inner capture/enhancement. This documented boundary follows the brief;
-its complete foreground-application behavior still needs the tests above.
-The implemented image targets linux/amd64. Arm64 is outside this delivery scope.
+The broad baseline uses GNU Readline; dedicated tests exercise ble.sh. Counts
+overlap and do not establish full editor parity. An earlier native Windows
+OpenSSH noninteractive published-port hop passed; it does not establish current
+interactive Windows Terminal acceptance. Native Linux Engine remains unverified.
+Versions/fixture commands: [COMPATIBILITY.md](COMPATIBILITY.md).
+Measured latency/scale and six metadata-only reports: [BENCHMARKS.md](BENCHMARKS.md).
+
+## TODO / open acceptance gates
+
+1. Resolve native identity for different machines reporting identical
+   hostname/account, including historical/imported/unregistered rows. Existing
+   registered-endpoint guards do not provide full isolation.
+2. Broaden profile/preexec/EXIT/existing-Atuin composition, custom keymaps,
+   foreground application and OpenSSH escape/suspension parity.
+3. Expand password/keyboard-interactive/agent/cert authentication and combined
+   proxy/forwarding cases; keep ordinary unsupported invocation pass-through.
+4. Exercise severe interleaved/malformed/stale frames, worker/relay failures,
+   disconnects on both links, DB busy/full/corruption and concurrent deletion.
+5. Broaden import truncation/rotation/overlap/time-bound/ambiguity and large-scale
+   recovery tests. Alias/policy/bounds changes currently limit deduplication.
+6. Run current interactive Windows Terminal, native Linux Engine
+   network/persistence/restore, second physical LAN client/firewall rejection,
+   and deliberate LAN DNS/VPN diagnostics.
+7. Observe remote-editor egress; verify native daemon/pty-proxy coexistence before
+   enabling them. Neither is claimed supported by the writer.
+8. Measure true cold-cache/full two-hop scaling, concurrent widgets and separate
+   workstation/hub latency. Native 1M query cost is a measured scaling limit.
+
+Nested inner-shell enhancement, independent-hub synchronization and arm64 Linux
+are outside current scope. Runtime fallbacks and import/privacy loss boundaries
+are documented in [OPERATIONS.md](OPERATIONS.md) and [ARCHITECTURE.md](ARCHITECTURE.md).

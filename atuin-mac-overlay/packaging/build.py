@@ -124,7 +124,7 @@ def main():
     shutil.copytree(editor / "licenses", output / "licenses/blesh", dirs_exist_ok=True)
     shutil.copytree(ROOT / "src", output / "lib", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ["shell", "config"]:
+    for name in ["shell", "config", "docs"]:
         shutil.copytree(ROOT / name, output / name, dirs_exist_ok=True)
     for name in ["atuin-layer", "ssh-overlay", "atuin-ssh"]:
         shutil.copy2(ROOT / "packaging/launcher", output / "bin" / name)

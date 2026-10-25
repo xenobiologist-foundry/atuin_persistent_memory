@@ -1,37 +1,64 @@
-# Version-pinned native compatibility components
+# Pinned native Atuin components
 
-The official `atuin` release remains installed unchanged. This directory builds two distinct executables from upstream Atuin **18.24.1**, commit `c58d2e993d05be423315f6ae3739e9ab3e45eea5`:
+Built from Atuin 18.24.1, commit `c58d2e993d05be423315f6ae3739e9ab3e45eea5`,
+with Rust 1.95.0 and the checked Cargo.lock. The official Atuin binary stays unchanged.
 
-- `atuin-ssh-native`: a small JSON-stdin adapter linked to upstream `atuin-client`, `atuin-common`, and `atuin-domain`. It performs native privacy checks, metadata-preserving capture/import, collision probes, and stable-ID reconciliation. It writes through upstream `Sqlite` and `HistoryStore` methods. Its direct SQL is read-only migration inspection.
-- `atuin-ssh-search`: upstream's real TUI, built with `--no-default-features --features client`, with the narrow source changes in `patch_search.py`. It adds an `ACCOUNT` scope alongside native `HOST`, scopes remote directory/workspace by account and host, and consumes explicit remote workspace metadata. `GLOBAL` removes these predicates. It does not replace the installed `atuin` binary or alter the native database schema.
+| Executable | Responsibility |
+| --- | --- |
+| `atuin-ssh-native` | JSON adapter using upstream client/common/domain APIs for privacy, metadata-correct capture/import, collision probes and stable-ID reconciliation |
+| `atuin-ssh-search` | Real upstream TUI plus `patch_search.py`: ACCOUNT, qualified remote directory/workspace, explicit result tags and READY/query descriptors |
 
-`Dockerfile` downloads the immutable source archive and verifies SHA-256 `1d22939a2c1433730c1ed97ae74ee119d65941a5144e30189cd7e2d76ed46a45`. The helper is copied into its `crates/` workspace. The checked-in `Cargo.lock` contains the upstream lock plus the helper package. Cargo runs with `--locked` under pinned Rust 1.95.0. All compilation occurs inside Linux containers; no Windows Rust/Python installation is used.
+`Dockerfile` verifies pinned source SHA256, adds this helper to the upstream
+workspace and builds with `--locked`; no host Rust installation is required.
+Exact downloads and versions are in `config/build-pins.toml` and `Dockerfile`.
+Dependency changes require renewed interface/migration compatibility checks.
 
-The adapter accepts only the pinned native version, with the exact official commit string when present. Before constructing native writable database handles it checks every applied history, record, and metadata migration version, checksum, and success flag through read-only connections. A different, older, newer, incomplete, or modified existing migration set is refused. Empty new state is initialized through native constructors. A stock Atuin upgrade must be handled deliberately before updating these compatibility components. The helper never downgrades a database.
+## Storage contract
 
-Operations are `check`, `filter`, `probe`, `start`, `write`, `import`, and `discard`. JSON replies contain states and IDs, never command bodies. `filter` uses native `History::should_save`, including native history/cwd regex and secret filters, before the Python worker persists payloads. `start` uses the supplied stable ID and actual remote timestamp and writes the native incomplete convention. `write` updates completion and appends through the native record store. Unknown imported fields use native `unknown` cwd and `-1` exit/duration; the bridge records that the session is unknown and whether a timestamp was synthesized.
+Before writable native constructors, the helper checks installed version and
+all existing history/record/metadata migration versions, checksums and success
+flags through read-only connections. Incompatible state is refused, never
+downgraded. New empty state uses native initialization. Daemon mode is refused.
+Writes use upstream Sqlite/HistoryStore APIs, without native schema changes.
 
-The supported command/result bound is **256 KiB of UTF-8 bytes** for capture, import, and native selection. Longer data is rejected visibly or cancels selection; it is never truncated into another command. This leaves room for encoded fields inside the protocol's 1 MiB frame bound. Initial queries above 64 KiB use an inherited Linux `memfd` read by the isolated native extension; this avoids Linux's per-environment-string limit without persisting the editing buffer to a filesystem. The descriptor is closed with the widget result. Native version/storage checks run before a widget result file is allocated. Every remote widget requires the isolated compatibility component for exact context and unambiguous action tags. A missing component fails before allocating a result; it never falls back to the ambiguous stock result protocol. Stock `atuin` remains available for direct use and the hub's own shell.
+Operations are `check`, `filter`, `probe`, `start`, `write`, `import`, `discard`.
+Replies contain states/IDs, not command bodies. Native privacy runs before bridge
+payload persistence. Unknown imported cwd/status/duration use native `unknown`/
+`-1` conventions, with synthetic timestamps/session limits retained in provenance.
 
-An owner-only local file lock serializes helper mutations across capture/import processes. Each operation preserves stable history identity. A retry scans/decrypts native records rather than deduplicating command text. Existing tombstones dominate replay, including when the materialized history view was lost; an existing create restores only its exact native facts. A native uniqueness collision remains pending in bridge metadata. Reconciliation currently scans the native record store, so crash recovery can be costly for large histories: measured scans of the million-record synthetic fixture took 11.197 seconds in isolation and 18.068 seconds during other verification. The latter used the installed adapter's default deadline and preserved the million-row history count. Reconcile requests have a bounded 120-second background-worker deadline; ordinary helper calls retain 10 seconds. Normal successful completion does not perform that scan. Native daemon operation is deliberately refused by the write adapter until its indexing/visibility behavior has been verified. Stock Atuin remains available.
+An owner-only lock serializes cooperating writers. Stable-ID reconciliation scans
+native encrypted records, honors tombstones and reconstructs exact missing views;
+it never deduplicates by command text. Uniqueness conflicts remain pending.
+Recovery calls allow 120 s; ordinary calls 10 s. Million-record scans measured
+11.2–18.1 s; see [benchmarks](../docs/BENCHMARKS.md).
 
-Different effective SSH endpoints may report an identical hostname/account. When connection provenance makes that identity ambiguous, the capture worker applies native privacy first, then retains permitted entries as `pending_identity` with their actual metadata instead of writing into a potentially merged native origin. This includes completed commands after volatile outcome deferral. The writer checks again immediately before a native mutation. A damaged provenance registry also fails closed to pending state. Existing native facts are retained. Resolving such endpoints through explicit stable machine mappings remains a separate required identity capability; the bridge does not invent a replacement hostname or claim these commands are already searchable.
+Registered endpoint collisions for one hostname/account remain pending after
+privacy checks, including a final pre-write check. A damaged provenance registry
+also fails closed. Historical/imported/unregistered origin isolation is unresolved.
+With `store_failed=false`, unknown live outcomes stay in bounded RAM until success;
+unknown imported outcomes remain pending without command payload.
 
-When `store_failed=false`, a capture's unknown future outcome changes the durability boundary. The native filter explicitly requests deferral, and the bridge keeps at most 128 such commands/16 MiB in RAM, with no command body in native history, SQLite/WAL, or the outbox. Successful completion permits the first durable acceptance with the original start metadata. Failed completion removes the RAM payload without persisting its body. If completion never arrives, that volatile command cannot be recovered after process loss; aggregate diagnostics report this boundary without retaining its ID or text. The default `store_failed=true` retains the ordinary durable incomplete-entry behavior. Under `store_failed=false`, historical entries with unknown exit status are reported as `pending_without_payload`: neither success nor privacy eligibility can be inferred. Their original source remains untouched and can be fetched again after an explicit policy change; the bridge retains no local command payload for those pending entries.
+## Search and exact results
 
-The helper and isolated search extension compile under pinned Rust 1.95.0. The final installed-image storage run passed 29 tests, including 15 against actual native executables, with one opt-in dedicated import test skipped. It covered native capture/record verification, stable replay, exact scopes, collision/privacy handling, incompatible migrations, missing-view reconstruction, deletion no-resurrection, concurrent writers, strict failed-command/unknown-outcome privacy, historical unknown exits without durable payload, ambiguous/damaged origin provenance, actual TUI result tags, and inherited memory query transport. Resource warnings were treated as errors. The dedicated non-root SSH import fixture separately passed the installed CLI dry-run/repeat/append/overlapping-rotation/read-only-recovery contract and verified original timestamp/multiline/Unicode plus native unknown metadata. Native storage tests are not a substitute for terminal acceptance; see the project status and benchmark reports for those results.
+Capture/import/selection transport accepts at most 256 KiB UTF-8, without
+truncation. Native SQLite expression/pattern limits still apply. Queries over
+64 KiB use inherited Linux memfd; READY uses an inherited descriptor. These are
+closed after use and do not persist typed queries.
 
-The 256 KiB limit describes exact transport and representation. Stock native search retains its SQLite limits: for example, a very large ordinary fuzzy query containing many whitespace tokens can exceed SQLite's expression depth, while very large literal LIKE patterns can exceed the native pattern limit. A 70 KiB native extended-regex query verified the memory descriptor path without exceeding those independent engine limits. Do not interpret the transport bound as a guarantee that every such query is efficiently searchable.
+Private `ATUIN_SSH_RESULT_PROTOCOL=2` tags insertion `__atuin_insert__:` and
+acceptance `__atuin_accept__:`; empty output cancels. Strip exactly one tag to
+preserve commands literally beginning with either prefix. Remote widgets require
+the compatible extension and fail before result allocation if it is unavailable.
+GLOBAL removes identity predicates; native shell filtering remains independent.
 
-The bridge sets `ATUIN_SSH_RESULT_PROTOCOL=2` only for the isolated native widget. A nonempty insertion/result-query is tagged `__atuin_insert__:`; acceptance retains the native `__atuin_accept__:` tag; an empty result still cancels. Python strips exactly one action tag before returning the command as encoded Readline data. This makes a literal command beginning with either tag safe: selecting it with Tab cannot become an accidental acceptance. The unmodified stock binary and direct extension invocations without this opt-in retain the upstream result protocol. Both action tags are excluded from the 256 KiB command-body bound.
+## Verification
 
-Build the test image and run the installed-package suite:
-
-```powershell
+```sh
 docker build --target test --tag atuin-ssh:test .
 docker run --rm --entrypoint python atuin-ssh:test -m unittest discover -s /opt/atuin-ssh/tests -p test_storage.py -v
 ```
 
-The native tests use fresh temporary state and cover actual native visibility/record verification, replay, account/machine/global/directory/workspace scoping, cross-host uniqueness conflicts, privacy, incompatible migration rejection, missing-view reconstruction, and deletion no-resurrection. Full concurrent native deletion races, native daemon search, and historical import scale require further evidence. End-to-end terminal verification is reported separately in the project status.
-
-The opt-in `benchmark` Cargo feature builds a separate `atuin-ssh-bench-seed` executable for the test image only. It refuses nonempty roots and production paths, and uses native `Sqlite::save_bulk` followed by native `HistoryStore::init_store` for synthetic fixtures. It never executes the generated commands or writes raw SQL to native tables. Scale measurements must name this synthetic dataset, record count, number of unique spellings, and actual timings; seeding is not itself a search-performance result.
+Run from the repository root with disposable state. Full terminal acceptance is
+recorded in [status](../docs/STATUS.md), separately from storage tests. The opt-in
+`benchmark` feature adds `atuin-ssh-bench-seed` only to test images; it refuses
+nonempty/production roots and seeds through native APIs, never raw SQL writes.

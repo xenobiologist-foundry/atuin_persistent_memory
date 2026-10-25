@@ -1,4 +1,5 @@
 .env
+*.log
 config/authorized_keys
 backups/
 artifacts/*
