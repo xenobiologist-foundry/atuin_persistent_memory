@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+app_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+exec "$app_root/python/bin/python3" -I "$app_root/lib/atuin_layer/manage.py" "$@"

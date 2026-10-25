@@ -1,0 +1,215 @@
+{
+  "repository": "https://github.com/xenobiologist-foundry/atuin_persistent_memory",
+  "revision": "0b577c0f8f55e9f0cc37c70b1a74bb466c7c9a72",
+  "files": [
+    {
+      "path": "config/atuin.toml",
+      "sha256": "b584ce0902927f8e8c7dd03268c76622edf0b58c713331ea10287d851ad1af11"
+    },
+    {
+      "path": "docker/blesh-package.bash",
+      "sha256": "cecd504978ac2f1901afe136d691ffaafc948f2b505b9058205b1d4d45ad601b"
+    },
+    {
+      "path": "docker/build-blesh-bundle.py",
+      "sha256": "8e4b355f2b98a350c3e4afe1cd073af7c392493c980c6ccba8875853d34230a7"
+    },
+    {
+      "path": "native-helper/Cargo.lock",
+      "sha256": "c90e546082bbb5176258ac4320281bb7291abb35720af1c37d738806395e8fc5"
+    },
+    {
+      "path": "native-helper/Cargo.toml",
+      "sha256": "378c49ffaf96e889bff5a46630bdbbac12660cfd82b085e168142b3b4c53a65e"
+    },
+    {
+      "path": "native-helper/README.md",
+      "sha256": "001e718cb647a77d18c386124ef93e47a3443b770a68c16f249f2ab9caa667b7"
+    },
+    {
+      "path": "native-helper/build.rs",
+      "sha256": "290570cedd8ffdc3406ae39cdb449acec1f08d9c39989c81b9c3e78604cce5aa"
+    },
+    {
+      "path": "native-helper/patch_search.py",
+      "sha256": "5c26d7745646e01b132bc06858533cb208c23293d267ce0dc40251a740d11f60"
+    },
+    {
+      "path": "native-helper/src/main.rs",
+      "sha256": "8e6fbd8bd47b9b0a167b3e5c5b052809b0a1fb2e4f91d22343b358d2538b4293"
+    },
+    {
+      "path": "requirements-build.lock",
+      "sha256": "0a60778bdb69df2d66b4fc885a1e467e26e1a43caa9ddead6bbf0ac14b73587a"
+    },
+    {
+      "path": "src/atuin_ssh/__init__.py",
+      "sha256": "186945e2c76c85339a38466bb7de4858c0cb194847004e9ca161f73abccacfef"
+    },
+    {
+      "path": "src/atuin_ssh/atuin.py",
+      "sha256": "a03bb4532d238ef04629b19e23bb548569aa67e5f0ce9cbd5dd673658945abf9"
+    },
+    {
+      "path": "src/atuin_ssh/bash/blesh_setup.bash",
+      "sha256": "42479f0ee09bab1a1ab3bf527664eb32d876ae36bcb206e70724e4ed7ad99a57"
+    },
+    {
+      "path": "src/atuin_ssh/bash/hub.bash",
+      "sha256": "e3ef8a33eb64bf87059d7d39eb1134b4c5e6fa9e9312ce0c35072a2602a9f65d"
+    },
+    {
+      "path": "src/atuin_ssh/bash/remote.bash",
+      "sha256": "1a6270a94d8516ab779f9728b75f5de7ef129656d7952e1a1dcf5b1423184fc6"
+    },
+    {
+      "path": "src/atuin_ssh/bash/remote_ble.bash",
+      "sha256": "1735f10cb082061494ac21781d188afc3952958ef745a81bd5733fb2f9a8a4da"
+    },
+    {
+      "path": "src/atuin_ssh/blesh.py",
+      "sha256": "ccd3f6698870685d960b82a8a9295e0792cf5e94c9d4e92b9a47f7a9d784111c"
+    },
+    {
+      "path": "src/atuin_ssh/bootstrap.py",
+      "sha256": "277486abe27c84aecd481173556126205f085f843b621a805c3bfd37c1fbbfab"
+    },
+    {
+      "path": "src/atuin_ssh/cli.py",
+      "sha256": "d180ea68062a890893eeb666fafa6bdb6a72b865b1a8153b70126cd5e1db455a"
+    },
+    {
+      "path": "src/atuin_ssh/context.py",
+      "sha256": "47899b31034c33b81ca38205907fd7bac710757022b8cf32c29986fd1433280c"
+    },
+    {
+      "path": "src/atuin_ssh/history.py",
+      "sha256": "6af789e281e3bfce2ef639df6ce88add5848b3956c88bccddb5964e565ae356b"
+    },
+    {
+      "path": "src/atuin_ssh/importing.py",
+      "sha256": "517d8d191f29b478f262a2d2df51011eb0ba231f73d275109652f8e12a8a1c57"
+    },
+    {
+      "path": "src/atuin_ssh/protocol.py",
+      "sha256": "4849153faf6953a98d677d52987edbbd7237a647c07317aa0216c023bb0305df"
+    },
+    {
+      "path": "src/atuin_ssh/relay.py",
+      "sha256": "38a945081cb1a77892bbcac0a13d097d71adde2a2a1ae607a22bb82f33c06461"
+    },
+    {
+      "path": "src/atuin_ssh/ssh.py",
+      "sha256": "25715d7ace7060b69056520e768429de04699a4240d8864c86ffd42755451df5"
+    },
+    {
+      "path": "tests/pty_client.py",
+      "sha256": "55336128bc49b60607cc41d7a29d6d14d26812305f67f5da30b4657b7ede756e"
+    },
+    {
+      "path": "tests/test_autosuggestions.py",
+      "sha256": "3ba0aba0bce3a4fb3319b10bc3d59594e91e9fb086473807f5e86e6bf6fdad5a"
+    },
+    {
+      "path": "tests/test_blesh_bundle.py",
+      "sha256": "0b282cdc02fee63682958ad388de24ab30459644cd73ed165f55999f2c7cc953"
+    },
+    {
+      "path": "tests/test_capture.py",
+      "sha256": "2f70e0f8df99d4d36bc563dc4d7eddbc159c28d6b2620b23e275ecb1e55ce9da"
+    },
+    {
+      "path": "tests/test_context.py",
+      "sha256": "c656c4b29e38ef2d6c5179f1faceea94a5d1d93408e7e00e2229c40174174a33"
+    },
+    {
+      "path": "tests/test_faults.py",
+      "sha256": "2603be82ff0bc8d7ba8f14aa41e52598e257a7a6ea63813e3974cefb68e66e7a"
+    },
+    {
+      "path": "tests/test_first_prompt.py",
+      "sha256": "65acbc6fa2de4a8778aafad14381007835f934f85c9aa819ae41c8a67caaa00a"
+    },
+    {
+      "path": "tests/test_import_batches.py",
+      "sha256": "175ccbb524060ae51d0672980d5a5e351ebbdde72aa39b42de2e3132be6a72b4"
+    },
+    {
+      "path": "tests/test_import_native_interrupt.py",
+      "sha256": "b18cb723ca587fe48418bb6de0a8c9be0d1f3f30a24eaa79c5ab33309a2f72a5"
+    },
+    {
+      "path": "tests/test_import_transport.py",
+      "sha256": "83f0a9e1e6faf993227ac2e0b217acceeedae2fabe1fec36f968510957a8fca5"
+    },
+    {
+      "path": "tests/test_legacy_bash.py",
+      "sha256": "d1c9088a2f02b61d5043f6b9961fcf5b7ee681e6fe3b8add428023894854c130"
+    },
+    {
+      "path": "tests/test_native_batches.py",
+      "sha256": "87f3e5262826a498a135001e88da48ccc67458165ea64ee3e6c8d98e1a362b32"
+    },
+    {
+      "path": "tests/test_native_suggestions.py",
+      "sha256": "13762c7d8540a1d39f29361f8f79f43d4ea2356cda6b0bc90c337cb7efe7d382"
+    },
+    {
+      "path": "tests/test_protocol.py",
+      "sha256": "6aa09c0539c397c88944feea1e45692d708b0d17d6dc02e144745eb47b253a6d"
+    },
+    {
+      "path": "tests/test_pty_client.py",
+      "sha256": "5ead2f15027170817e4e0bfdade56b1cf1906178f3da1206c1b5fc52c794e8b6"
+    },
+    {
+      "path": "tests/test_relay.py",
+      "sha256": "d1137ddb2743f694316883994e82f7e94fe7770f09dfe020ce38240c70f7a0e7"
+    },
+    {
+      "path": "tests/test_remote_autosuggestions.py",
+      "sha256": "67194a63fa2decf454d10d74d2a2522141e94bf9f8d4b5585f0321875b35a94f"
+    },
+    {
+      "path": "tests/test_remote_relay.py",
+      "sha256": "c1ce359b374f84903bc4c53d905029c3e638bcdca22a35bd9314ac4650c71d78"
+    },
+    {
+      "path": "tests/test_remote_startup.py",
+      "sha256": "0da0f8a8666094ebec399da6c30af0c9a1d54ca1fa93d8152f2061e23657b697"
+    },
+    {
+      "path": "tests/test_ssh.py",
+      "sha256": "a70084acec6dc642cfa5c4149a3114f13bd16cedb2cea606f3a5bdc6f492d2b8"
+    },
+    {
+      "path": "tests/test_ssh_integration.py",
+      "sha256": "5c1c6a36931f8a8f59840e32fb8e393c734d744adb3217c39642ec84bbadf9c5"
+    },
+    {
+      "path": "tests/test_startup.py",
+      "sha256": "29f967344542629db8158bbc0ff3abac097ae2f0b8baff88121e69159b77320d"
+    },
+    {
+      "path": "tests/test_storage.py",
+      "sha256": "c1d088f22bdaf9a8c0e517ada8b2babe2aea1be89cb707d80a5765839a711e04"
+    },
+    {
+      "path": "tests/test_terminal.py",
+      "sha256": "a22d3270758bbd3f3c048b903993aafe98242c720f666765dd20bed288b0ad2a"
+    },
+    {
+      "path": "tests/test_two_hop.py",
+      "sha256": "5e76ea02d5a51a08ef6b0e66176a5859b7a099a5522140c23c87bd6c187ab62c"
+    },
+    {
+      "path": "docker/build-bash44.sh",
+      "sha256": "c96eba656a35c711b759ef3d135b4ffe1c50f58edf48d7e504b856f8ba98e8ef"
+    },
+    {
+      "path": "docker/bash44-sources.sha256",
+      "sha256": "a370d0820e45f48d844decd4f0bad1ae5b3e8580eaacfef33c76b2815206e4ae"
+    }
+  ],
+  "license": "No root license at the baseline; preserve authorship. Third-party licenses are included by the package builder."
+}

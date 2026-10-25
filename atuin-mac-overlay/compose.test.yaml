@@ -1,0 +1,23 @@
+name: atuin-mac-overlay-test
+services:
+  destination:
+    build:
+      context: tests/destination
+      target: modern
+    platform: linux/amd64
+    hostname: overlay-fixture
+    ports:
+      - "127.0.0.1::22"
+    volumes:
+      - ./.build/fixture-keys/id_ed25519.pub:/fixtures/id_ed25519.pub:ro
+  destination-bash44:
+    profiles: [legacy]
+    build:
+      context: tests/destination
+      target: legacy
+    platform: linux/amd64
+    hostname: overlay-fixture
+    ports:
+      - "127.0.0.1::22"
+    volumes:
+      - ./.build/fixture-keys/id_ed25519.pub:/fixtures/id_ed25519.pub:ro

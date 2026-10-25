@@ -1,0 +1,34 @@
+# All native state lives on this Mac. No account or sync service is used.
+auto_sync = false
+update_check = false
+enter_accept = true
+filter_mode = "global"
+filter_mode_shell_up_key_binding = "session"
+search_mode = "fuzzy"
+inline_height = 20
+exit_mode = "return-original"
+show_help = true
+show_tabs = true
+
+# Shared Mac/remote history should be visible across zsh and Bash. This filter
+# is independent of host/account scope; "auto" limits results to this shell.
+[search]
+shells = "all"
+
+[sync]
+records = true
+
+[daemon]
+enabled = false
+
+[ai]
+enabled = false
+
+[pty_proxy]
+enabled = false
+
+[stats]
+common_prefix = ["sudo"]
+
+[ui]
+columns = ["duration", "time", "host", "user", "command"]

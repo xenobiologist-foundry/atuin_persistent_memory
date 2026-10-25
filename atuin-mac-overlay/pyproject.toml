@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atuin-mac-overlay"
+version = "0.1.0"
+requires-python = ">=3.14,<3.15"
+description = "Native Mac zsh with local Atuin and temporary remote Bash integration"
+dependencies = []
+
+[project.scripts]
+atuin-layer = "atuin_layer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+atuin_ssh = ["bash/*.bash"]
